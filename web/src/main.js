@@ -261,8 +261,8 @@ async function openFiles(files) {
   }
 }
 
-async function addText(text, font, heightMm) {
-  const lines = await textLines(font, text, heightMm);
+async function addText(text, font, heightMm, bend = 0) {
+  const lines = await textLines(font, text, heightMm, bend);
   addPart(makePart({ name: text, kind: 'text', lines, fill: 'nonzero' }));
 }
 
@@ -760,6 +760,11 @@ function openTextDialog(mode) {
   $('#textInput').focus();
 }
 $('#textBtn').addEventListener('click', () => openTextDialog('text'));
+const showBend = () => {
+  const v = Number($('#textBend').value);
+  $('#textBendOut').textContent = v === 0 ? 'straight' : v > 0 ? `arch up ${v}°` : `arch down ${-v}°`;
+};
+$('#textBend').addEventListener('input', showBend);
 $('#textForm').addEventListener('submit', async (e) => {
   if (e.submitter?.value !== 'ok') return;
   e.preventDefault();
@@ -767,11 +772,12 @@ $('#textForm').addEventListener('submit', async (e) => {
   if (!text) return;
   const font = new FormData($('#textForm')).get('font');
   const height = Math.min(150, Math.max(8, Number($('#textHeight').value) || 25));
+  const bend = Math.max(-180, Math.min(180, Number($('#textBend').value) || 0));
   busy('Making letters…');
   try {
-    if (textMode === 'text') await addText(text, font, height);
+    if (textMode === 'text') await addText(text, font, height, bend);
     else {
-      const lines = await textLines(font, text, height);
+      const lines = await textLines(font, text, height, bend);
       addPart(fixJobs(textMode === 'keychain' ? keychainPart(text, lines) : doorSignPart(text, lines)));
       toast(textMode === 'keychain'
         ? 'Keychain made: the name is a pocket, the outline is cut out, and it has a keyring hole.'

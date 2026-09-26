@@ -37,7 +37,8 @@ npm run deploy        # build and deploy
 
 Polygon offsets by [Clipper](https://github.com/junmer/clipper-lib) (Angus Johnson, Boost licence).
 Fonts read with [opentype.js](https://github.com/opentypejs/opentype.js) (MIT). Fonts: Lilita One
-(Juan Montoreano) and Pacifico (The Pacifico Project Authors), both SIL Open Font License 1.1,
+(Juan Montoreano), Pacifico (The Pacifico Project Authors) and Allerta Stencil (Matt McInerney),
+all SIL Open Font License 1.1,
 licence files in `web/public/fonts/`.
 
 ## Trademarks and safety

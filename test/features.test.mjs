@@ -120,3 +120,20 @@ test('starters: keychain, door sign and ornament plan cleanly', () => {
   assert.deepEqual(plan([o]).warnings.map((w) => w.code), []);
   assert.ok(partBounds(o).w > 60);
 });
+
+import { bendLetter } from '../shared/text-bend.js';
+
+test('bend: straight stays put; arch up drops the ends and tilts them; arch down lifts them', () => {
+  const letter = [[45, 0], [55, 0], [55, -20], [45, -20]]; // centre 50 on a 100 mm line
+  assert.deepEqual(bendLetter(letter, 50, 100, 0), letter);
+  const mid = bendLetter(letter, 50, 100, 90);
+  assert.ok(mid.every((p, i) => Math.abs(p[0] - letter[i][0]) < 1e-9 && Math.abs(p[1] - letter[i][1]) < 1e-9), 'middle letter unchanged');
+  const endUp = bendLetter([[95, 0]], 95, 100, 90)[0];
+  const endDown = bendLetter([[95, 0]], 95, 100, -90)[0];
+  assert.ok(endUp[1] > 5, `arch up: right end drops (y down), got ${endUp[1]}`);
+  assert.ok(endDown[1] < -5, `arch down: right end rises, got ${endDown[1]}`);
+  // A letter's top leans outward at the ends of an arch up (turned clockwise on screen).
+  const top = bendLetter([[95, -20]], 95, 100, 90)[0];
+  assert.ok(top[0] > endUp[0], 'top of the right-end letter leans right');
+  assert.deepEqual(bendLetter([[1, 1]], 0, 100, 999)[0].map((v) => Number.isFinite(v)), [true, true], 'bend is capped');
+});

@@ -48,6 +48,30 @@ await page.waitForFunction(() => window.umc.state.parts.length === 1);
 const blockJobs = await page.evaluate(() => window.umc.state.parts[0].jobs);
 check('block O has a hole', blockJobs.filter((j) => j === 'hole').length === 1, JSON.stringify(blockJobs));
 
+// Stencil letters: the O has no loose middle (bridges split it), so no island needs holding.
+await page.keyboard.press('Delete');
+await page.evaluate(() => window.umc.addText('OBA', 'stencil', 30));
+await page.waitForFunction(() => window.umc.state.parts.length === 1);
+const stencilHoles = await page.evaluate(() => window.umc.state.parts[0].jobs.filter((j) => j === 'hole').length);
+check('stencil letters have no loose centres', stencilHoles === 0, String(stencilHoles));
+// Bent text through the dialog: arch up 90 degrees.
+await page.keyboard.press('Delete');
+await page.click('#textBtn');
+await page.fill('#textInput', 'COASTER');
+await page.check('input[name="font"][value="block"]');
+await page.fill('#textBend', '90');
+await page.dispatchEvent('#textBend', 'input');
+check('bend label reads arch up', /arch up 90/.test(await page.textContent('#textBendOut')));
+await page.click('#textForm button[value="ok"]');
+await page.waitForFunction(() => window.umc.state.parts.length === 1, null, { timeout: 15000 });
+const shape = await page.evaluate(() => {
+  const p = window.umc.state.parts[0];
+  const ys = p.lines.map((l) => Math.min(...l.points.map((q) => q[1])));
+  return { first: ys[0], mid: ys[Math.floor(ys.length / 2)] };
+});
+check('bent text: the middle sits higher than the ends (y up on the board)', shape.mid > shape.first + 3, JSON.stringify(shape));
+await page.evaluate(() => window.umc.settled());
+await page.screenshot({ path: `${OUT}text-bent.png` });
 check('no page errors', errors.length === 0, errors.join(' | '));
 await browser.close();
 process.exitCode = failed() ? 1 : 0;
