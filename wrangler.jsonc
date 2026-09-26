@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "uploadmycut",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-08-31",
+  // uploadmycut.com is the real address; www redirects to it (src/worker.js). The workers.dev URL
+  // stays on as a fallback.
+  "routes": [
+    { "pattern": "uploadmycut.com", "custom_domain": true },
+    { "pattern": "www.uploadmycut.com", "custom_domain": true }
+  ],
+  "workers_dev": true,
+  "kv_namespaces": [
+    // This app's own namespace (title uploadmycut-CLASS_KV). Never reuse uploadmycode's
+    // (CLASS_KV), uploadmylaser's or uploadmymodel's.
+    { "binding": "CLASS_KV", "id": "108310feb1eb4ec09b2652febffcb103" }
+  ],
+  // TEACHER_KEY is a secret: npx wrangler secret put TEACHER_KEY (the shared family password).
+  // public/ is built from web/ by `npm run build` (npm run deploy does it first).
+  "assets": {
+    "directory": "./public/",
+    "binding": "ASSETS",
+    // Every response, static files included, goes through the Worker for https + security headers.
+    "run_worker_first": true,
+    "not_found_handling": "404-page"
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}

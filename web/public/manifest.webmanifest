@@ -1,0 +1,14 @@
+{
+  "name": "uploadmycut",
+  "short_name": "uploadmycut",
+  "description": "Put your drawing on the board, pick what gets cut, and make a cut file for the class Shapeoko.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1E3A8A",
+  "theme_color": "#1E3A8A",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

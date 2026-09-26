@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uploadmycut teacher</title>
+  <meta name="description" content="Class setup for uploadmycut: bit, materials, speeds and what students may cut.">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+  <meta name="theme-color" content="#1E3A8A">
+  <script src="/theme-boot.js"></script>
+</head>
+<body class="page">
+  <header class="titlebar">
+    <a class="brand" href="/" style="text-decoration:none"><img src="/icon.svg" alt="" width="36" height="36">uploadmycut</a>
+    <h1 class="page-title">Teacher</h1>
+    <span class="grow"></span>
+    <a class="toplink" href="/usb-test/" title="Read-only check that this computer can talk to the Shapeoko">USB test</a>
+    <a class="toplink" href="/">Student page</a>
+    <button id="theme" class="themebtn" type="button">🖥️ System</button>
+  </header>
+
+  <main class="page-main">
+    <section class="card page-card" id="keyCard">
+      <h2>Teacher key</h2>
+      <form id="keyForm" class="row">
+        <label class="sr-only" for="key">Teacher key</label>
+        <input id="key" class="text" type="password" autocomplete="current-password" placeholder="Teacher key" required>
+        <button class="primary" type="submit">Open</button>
+      </form>
+      <p id="keyMsg" class="note">The same teacher password as uploadmycode, uploadmylaser and uploadmymodel.</p>
+    </section>
+
+    <form id="setup" hidden>
+      <section class="card page-card">
+        <h2>Machine</h2>
+        <div class="grid3">
+          <label class="lab">Machine<select id="machine"></select></label>
+          <label class="lab">Router<select id="router"></select></label>
+          <label class="lab">Bit for this class<select id="bit"></select></label>
+        </div>
+        <p class="note">One bit for every cut, so each file needs no bit change. The page tells students which bit it is. Changing the bit? Press <em>Starting values</em> on each material.</p>
+      </section>
+
+      <section class="card page-card">
+        <div class="row"><h2 class="grow">Materials</h2><button id="addMat" type="button">＋ Add material</button></div>
+        <p class="note">Board size is the piece students design on, not the machine table. Feeds are <strong>starting values, not tested at school</strong> (docs/HARDWARE.md). Watch the first cut and slow down if the router bogs or the bit squeals.</p>
+        <div class="table-wrap">
+          <table class="mats">
+            <thead><tr>
+              <th>Name</th><th>Kind</th><th>Thick mm</th><th>Width mm</th><th>Length mm</th>
+              <th>Feed mm/min</th><th>Plunge mm/min</th><th>Per pass mm</th><th>Dial</th><th><span class="sr-only">Actions</span></th>
+            </tr></thead>
+            <tbody id="matRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card page-card">
+        <h2>What students may do</h2>
+        <div class="row" id="jobs"></div>
+      </section>
+
+      <section class="card page-card">
+        <h2>Cut rules</h2>
+        <div class="grid3">
+          <label class="lab">Tab width mm<input id="tabW" class="text" type="number" step="0.5"></label>
+          <label class="lab">Tab height mm<input id="tabH" class="text" type="number" step="0.5"></label>
+          <label class="lab">Engrave depth mm<input id="engraveDepth" class="text" type="number" step="0.1"></label>
+          <label class="lab">Deepest pocket mm<input id="pocketMaxDepth" class="text" type="number" step="0.5"></label>
+          <label class="lab">Safe height mm<input id="safeZ" class="text" type="number" step="0.5"></label>
+          <label class="lab">Cut below the board mm<input id="throughMm" class="text" type="number" step="0.05"></label>
+          <label class="lab">Edge margin mm<input id="marginMm" class="text" type="number" step="1"></label>
+          <label class="lab">Pocket stepover (of the bit)<input id="stepover" class="text" type="number" step="0.05"></label>
+          <label class="check lab-check"><input id="climb" type="checkbox"> Climb milling (default off: conventional)</label>
+        </div>
+        <p class="note">Safe height must clear your clamps. Tabs hold cut-out parts so they cannot fly; cut them free with a flush saw or knife after.</p>
+      </section>
+
+      <section class="card page-card">
+        <h2>Note to the class</h2>
+        <textarea id="note" class="text" rows="3" maxlength="400" placeholder="Shown on every student's board panel."></textarea>
+      </section>
+
+      <div class="row save-row">
+        <span id="saveMsg" class="note grow" aria-live="polite"></span>
+        <button id="reset" type="button" class="danger">Reset to defaults</button>
+        <button class="primary big" type="submit">Save class setup</button>
+      </div>
+    </form>
+  </main>
+
+  <script type="module" src="/src/teacher.js"></script>
+</body>
+</html>

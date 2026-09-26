@@ -1,0 +1,31 @@
+/* Teacher page: a normal scrolling page instead of the full-window board. */
+body.page { display: block; overflow: auto; height: auto; min-height: 100dvh; }
+.page-title { color: var(--muted); font-weight: 600; font-size: 1rem; margin: 0; }
+.page-main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+.page-card { padding: 14px 16px; display: grid; gap: 10px; }
+.page-card h2 { margin: 0; font-size: 1.05rem; color: var(--wood-ink); }
+#setup { display: grid; gap: 14px; }
+.text { border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; background: var(--card2); color: var(--ink); min-width: 0; width: 100%; }
+textarea.text { font: inherit; resize: vertical; }
+select { border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; background: var(--card2); }
+#keyForm .text { max-width: 320px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
+.lab { display: grid; gap: 4px; font-size: .86rem; color: var(--muted); }
+.lab select, .lab input { color: var(--ink); }
+.lab-check { align-self: end; }
+.table-wrap { overflow-x: auto; }
+.mats { border-collapse: collapse; width: 100%; font-size: .86rem; }
+.mats th { text-align: left; color: var(--muted); font-weight: 600; padding: 4px; white-space: nowrap; }
+.mats td { padding: 3px 4px; }
+.mats td input[type="number"] { width: 66px; }
+.mats td input[data-f="label"] { min-width: 120px; }
+.mats td select { width: 130px; }
+.mats td button { padding: 5px 7px; font-size: .82rem; }
+.nowrap { white-space: nowrap; }
+.save-row { justify-content: flex-end; }
+.bad-text { color: var(--bad) !important; }
+@media (max-width: 760px) { .grid3 { grid-template-columns: 1fr; } }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.log { margin: 0; max-height: 320px; overflow: auto; background: var(--card2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+#guess { margin: 0; padding-left: 18px; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }

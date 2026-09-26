@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100mm" height="60mm" viewBox="0 0 100 60">
+  <!-- Test drawing: a rounded sign with a hanging hole, a star (via <use>), a wavy open line, and
+       text that the reader must leave out with a note. -->
+  <defs>
+    <path id="star" d="M0,-12 L3.5,-4 L12,-4 L5.5,1.5 L8,10 L0,5 L-8,10 L-5.5,1.5 L-12,-4 L-3.5,-4 Z"/>
+  </defs>
+  <g transform="translate(0 0)">
+    <rect x="2" y="2" width="96" height="56" rx="8"/>
+    <circle cx="10" cy="10" r="3"/>
+    <use xlink:href="#star" x="30" y="30"/>
+    <path d="M50 30 C 60 20, 70 40, 80 30 S 90 20, 95 30" fill="none" stroke="black"/>
+    <text x="50" y="50">Hi</text>
+  </g>
+</svg>

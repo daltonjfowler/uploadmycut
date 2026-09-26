@@ -1,0 +1,291 @@
+// A student's design: a list of parts on the board. Pure data + maths, used by the page and tests.
+//
+// A part is one drawing, shape or text. Its lines are stored once in part-local mm (y up, centred
+// on 0,0) and never change; moving, scaling, turning and mirroring only change the part's numbers.
+// Each line has its own job (shared/cam.js JOBS).
+//
+//   part = { id, name, kind, fill, lines: [{ points, closed }], jobs: ['cutout', ...], pocketDepth,
+//            x, y, scale, rotation (degrees, counter-clockwise), mirror }
+//
+// `fill` says which areas a set of closed lines encloses: 'nonzero' for text (fonts wind letter
+// centres the other way round), 'evenodd' for drawings (safest guess for an unknown SVG).
+
+import { area, bounds, offset, pointInRegion, union } from './geometry.js';
+
+let nextId = 1;
+
+/** Lines in SVG orientation (y down, any position) → a new part centred on 0,0 with y up. */
+export function makePart({ name, kind, lines, flipY = true, fill = 'evenodd' }) {
+  const flipped = lines.map((l) => ({ points: l.points.map(([x, y]) => [x, flipY ? -y : y]), closed: l.closed }));
+  const b = bounds(flipped.map((l) => l.points));
+  const cx = (b.minX + b.maxX) / 2;
+  const cy = (b.minY + b.maxY) / 2;
+  const centred = flipped.map((l) => ({ points: l.points.map(([x, y]) => [x - cx, y - cy]), closed: l.closed }));
+  return {
+    id: `p${nextId++}`,
+    name: String(name ?? 'drawing').slice(0, 60),
+    kind,
+    fill,
+    lines: centred,
+    // A line may bring its own job (the coaster's pocket); the rest get the first guess.
+    jobs: (fill === 'nonzero' ? autoJobsByFill(centred) : autoJobs(centred)).map((j, i) => lines[i].job ?? j),
+    pocketDepth: null,
+    x: 0,
+    y: 0,
+    scale: 1,
+    rotation: 0,
+    mirror: false,
+  };
+}
+
+/**
+ * First guess at each line's job: open lines are engraved; a closed line inside an even number
+ * of other closed lines is cut out, inside an odd number it is a hole (a letter O: outside cut
+ * out, the middle a hole; a keychain: the ring hole).
+ */
+export function autoJobs(lines) {
+  return lines.map((l, i) => {
+    if (!l.closed) return 'engrave';
+    const a = Math.abs(area(l.points));
+    let depth = 0;
+    lines.forEach((o, j) => {
+      if (j === i || !o.closed || Math.abs(area(o.points)) <= a) return;
+      if (pointInRegion(l.points[0], [o.points])) depth++;
+    });
+    return depth % 2 === 0 ? 'cutout' : 'hole';
+  });
+}
+
+function winding(pt, lines) {
+  let w = 0;
+  const [x, y] = pt;
+  for (const l of lines) {
+    if (!l.closed) continue;
+    const p = l.points;
+    for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+      const [xa, ya] = p[j];
+      const [xb, yb] = p[i];
+      if (ya <= y) {
+        if (yb > y && (xb - xa) * (y - ya) - (x - xa) * (yb - ya) > 0) w++;
+      } else if (yb <= y && (xb - xa) * (y - ya) - (x - xa) * (yb - ya) < 0) w--;
+    }
+  }
+  return w;
+}
+
+/**
+ * First guess for text (non-zero fill): a closed line with filled area just inside it is an
+ * outside edge (cut out); one with empty space inside is a letter centre (hole). Unlike
+ * autoJobs, this stays right when joined-up script letters overlap each other.
+ */
+export function autoJobsByFill(lines) {
+  return lines.map((l) => {
+    if (!l.closed) return 'engrave';
+    const p = l.points;
+    let best = 0;
+    let bestLen = -1;
+    for (let i = 0; i < p.length; i++) {
+      const q = p[(i + 1) % p.length];
+      const len = Math.hypot(q[0] - p[i][0], q[1] - p[i][1]);
+      if (len > bestLen) {
+        bestLen = len;
+        best = i;
+      }
+    }
+    const a = p[best];
+    const b = p[(best + 1) % p.length];
+    const sign = area(p) > 0 ? 1 : -1; // counter-clockwise: the inside is on the left
+    const eps = Math.min(0.02, bestLen / 4);
+    const nx = (-(b[1] - a[1]) / bestLen) * sign * eps;
+    const ny = ((b[0] - a[0]) / bestLen) * sign * eps;
+    const probe = [(a[0] + b[0]) / 2 + nx, (a[1] + b[1]) / 2 + ny];
+    return winding(probe, lines) !== 0 ? 'cutout' : 'hole';
+  });
+}
+
+/**
+ * A new part with an outline `gap` mm around everything closed in `part` (a name keychain: the
+ * border is cut out, the letters become a pocket). Lines stay in the part's local units.
+ */
+export function withBorder(part, gapMm) {
+  const closed = part.lines.filter((l) => l.closed).map((l) => l.points);
+  if (!closed.length) return null;
+  const gap = gapMm / part.scale;
+  const outer = offset(union(closed, part.fill === 'nonzero' ? 'nonzero' : 'evenodd'), gap).filter((p) => area(p) > 0);
+  if (!outer.length) return null;
+  const lines = [...part.lines, ...outer.map((points) => ({ points, closed: true }))];
+  const jobs = [...part.jobs.map((j, i) => (part.lines[i].closed ? 'pocket' : j)), ...outer.map(() => 'cutout')];
+  return { ...part, lines, jobs, fill: part.fill === 'nonzero' ? 'nonzero' : 'evenodd' };
+}
+
+/** The part's local → board transform as [a, b, c, d, e, f] (x' = a x + c y + e). */
+export function partMatrix(part) {
+  const t = (part.rotation * Math.PI) / 180;
+  const s = part.scale;
+  const mx = part.mirror ? -1 : 1;
+  const cos = Math.cos(t);
+  const sin = Math.sin(t);
+  return [cos * s * mx, sin * s * mx, -sin * s, cos * s, part.x, part.y];
+}
+
+export function toBoard(part, pts) {
+  const [a, b, c, d, e, f] = partMatrix(part);
+  return pts.map(([x, y]) => [a * x + c * y + e, b * x + d * y + f]);
+}
+
+/** Board point → part-local point. */
+export function toLocal(part, [x, y]) {
+  const [a, b, c, d, e, f] = partMatrix(part);
+  const det = a * d - b * c;
+  const px = x - e;
+  const py = y - f;
+  return [(d * px - c * py) / det, (-b * px + a * py) / det];
+}
+
+export function partBounds(part) {
+  return bounds(part.lines.map((l) => toBoard(part, l.points)));
+}
+
+/** Local size (before turning), for the W × H boxes. */
+export function partSize(part) {
+  const b = bounds(part.lines.map((l) => l.points));
+  return { w: b.w * part.scale, h: b.h * part.scale };
+}
+
+/** Every line of every part in board mm, ready for planCut. Mirroring flips the winding back. */
+export function designShapes(parts, defaultPocketDepth) {
+  const out = [];
+  for (const p of parts) {
+    p.lines.forEach((l, i) => {
+      const job = p.jobs[i];
+      if (job === 'skip') return;
+      out.push({ points: toBoard(p, l.points), closed: l.closed, job, depth: p.pocketDepth ?? defaultPocketDepth, group: p.id, fill: p.fill });
+    });
+  }
+  return out;
+}
+
+/** Put a new part in the middle of the board, shrunk to fit inside the margin if it is too big. */
+export function placeOnBoard(part, board, margin) {
+  const size = bounds(part.lines.map((l) => l.points));
+  const room = { w: board.w - 2 * margin, h: board.h - 2 * margin };
+  if (size.w > room.w || size.h > room.h) part.scale = Math.min(room.w / size.w, room.h / size.h);
+  part.x = board.w / 2;
+  part.y = board.h / 2;
+  return part;
+}
+
+/**
+ * Keep a part inside the board less `margin`: shrink it (about its centre) if it is too big, then
+ * slide it back in. Returns true when anything changed.
+ */
+export function fitOnBoard(part, board, margin) {
+  let b = partBounds(part);
+  const room = { w: board.w - 2 * margin, h: board.h - 2 * margin };
+  let changed = false;
+  if (b.w > room.w || b.h > room.h) {
+    const k = Math.min(room.w / b.w, room.h / b.h) * 0.999;
+    const cx = (b.minX + b.maxX) / 2;
+    const cy = (b.minY + b.maxY) / 2;
+    part.scale *= k;
+    part.x = cx + (part.x - cx) * k;
+    part.y = cy + (part.y - cy) * k;
+    b = partBounds(part);
+    changed = true;
+  }
+  const dx = Math.max(0, margin - b.minX) - Math.max(0, b.maxX - (board.w - margin));
+  const dy = Math.max(0, margin - b.minY) - Math.max(0, b.maxY - (board.h - margin));
+  if (dx || dy) {
+    part.x += dx;
+    part.y += dy;
+    changed = true;
+  }
+  return changed;
+}
+
+function distToSegment(p, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0;
+  return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
+}
+
+/**
+ * Which part and line is under a board point: a line within `tol` mm wins; otherwise the
+ * smallest closed line around the point. Top part (last in the list) first. null = nothing.
+ */
+export function hitTest(parts, pt, tol) {
+  for (let pi = parts.length - 1; pi >= 0; pi--) {
+    const part = parts[pi];
+    const b = partBounds(part);
+    if (pt[0] < b.minX - tol || pt[0] > b.maxX + tol || pt[1] < b.minY - tol || pt[1] > b.maxY + tol) continue;
+    const local = toLocal(part, pt);
+    const ltol = tol / part.scale;
+    let best = null;
+    part.lines.forEach((l, li) => {
+      const pts = l.points;
+      const n = pts.length;
+      for (let i = 1; i < n + (l.closed ? 1 : 0); i++) {
+        const d = distToSegment(local, pts[i - 1], pts[i % n]);
+        if (d <= ltol && (!best || d < best.d)) best = { d, li };
+      }
+    });
+    if (best) return { part, line: best.li, onLine: true };
+    let inside = null;
+    part.lines.forEach((l, li) => {
+      if (!l.closed || !pointInRegion(local, [l.points])) return;
+      const a = Math.abs(area(l.points));
+      if (!inside || a < inside.a) inside = { a, li };
+    });
+    if (inside) return { part, line: inside.li, onLine: false };
+  }
+  return null;
+}
+
+/** The numbers undo needs (the lines themselves never change, so they are shared). */
+export function snapshot(parts) {
+  return parts.map((p) => ({ ...p, jobs: p.jobs.slice() }));
+}
+
+const SAVED_JOBS = new Set(['cutout', 'hole', 'engrave', 'pocket', 'skip']);
+const MAX_SAVED_POINTS = 400_000;
+
+/**
+ * A part read back from browser storage, checked field by field, with a fresh id; null if any
+ * of it looks wrong (then the page just starts without it).
+ */
+export function revivePart(raw, budget = { points: MAX_SAVED_POINTS }) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.lines) || !Array.isArray(raw.jobs)) return null;
+  if (!raw.lines.length || raw.lines.length !== raw.jobs.length || raw.lines.length > 5000) return null;
+  const num = (v) => typeof v === 'number' && Number.isFinite(v);
+  const lines = [];
+  for (const l of raw.lines) {
+    if (!l || !Array.isArray(l.points) || l.points.length < 2) return null;
+    budget.points -= l.points.length;
+    if (budget.points < 0) return null;
+    if (!l.points.every((p) => Array.isArray(p) && p.length === 2 && num(p[0]) && num(p[1]))) return null;
+    lines.push({ points: l.points.map((p) => [p[0], p[1]]), closed: l.closed === true });
+  }
+  if (!raw.jobs.every((j) => SAVED_JOBS.has(j))) return null;
+  if (![raw.x, raw.y, raw.scale, raw.rotation].every(num) || !(raw.scale > 0)) return null;
+  if (raw.pocketDepth !== null && raw.pocketDepth !== undefined && !num(raw.pocketDepth)) return null;
+  return {
+    id: `p${nextId++}`,
+    name: String(raw.name ?? 'drawing').slice(0, 60),
+    kind: ['svg', 'shape', 'text'].includes(raw.kind) ? raw.kind : 'svg',
+    fill: raw.fill === 'nonzero' ? 'nonzero' : 'evenodd',
+    lines,
+    jobs: raw.jobs.slice(),
+    pocketDepth: raw.pocketDepth ?? null,
+    x: raw.x,
+    y: raw.y,
+    scale: raw.scale,
+    rotation: raw.rotation,
+    mirror: raw.mirror === true,
+  };
+}
+
+export function cloneForCopy(part) {
+  return { ...part, id: `p${nextId++}`, jobs: part.jobs.slice() };
+}

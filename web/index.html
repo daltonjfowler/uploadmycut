@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uploadmycut</title>
+  <meta name="description" content="Put your drawing on the board, pick what gets cut, and make a cut file for the class Shapeoko.">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#1E3A8A">
+  <!-- Blocking on purpose: sets data-theme before the first paint. -->
+  <script src="/theme-boot.js"></script>
+</head>
+<body>
+  <header class="titlebar">
+    <strong class="brand"><img src="/icon.svg" alt="" width="36" height="36">uploadmycut</strong>
+    <nav class="stages" aria-label="Steps">
+      <button class="stage on" type="button" data-stage="design" aria-current="step">Design</button>
+      <button class="stage" type="button" data-stage="preview">Preview</button>
+    </nav>
+    <label class="chip" title="The wood you are cutting. Your teacher sets the size and the speeds.">
+      <span class="chip-dot" aria-hidden="true"></span>
+      <span class="chip-text"><strong>Shapeoko</strong><small id="bitText">1/8 in flat bit</small></span>
+      <select id="material" aria-label="Material"></select>
+    </label>
+    <span class="grow"></span>
+    <button id="help" class="toplink" type="button">ⓘ How to cut</button>
+    <a class="toplink" href="/teacher/" title="For teachers: bit, materials and speeds">Teacher</a>
+    <button id="theme" class="themebtn" type="button">🖥️ System</button>
+  </header>
+
+  <main id="stage" class="stage-area">
+    <div id="board" class="board-area"></div>
+
+    <div class="open-group">
+      <button id="open" class="open-btn" type="button" title="Open a drawing (Ctrl+O)">
+        <span aria-hidden="true">📂</span> Open drawing
+      </button>
+      <input id="fileInput" type="file" accept=".svg,image/svg+xml" multiple hidden>
+      <div class="menu-wrap">
+        <button id="shapesBtn" class="open-btn" type="button" aria-haspopup="menu" aria-expanded="false">
+          <span aria-hidden="true">⬟</span> Shapes
+        </button>
+        <div id="shapesMenu" class="menu card" role="menu" hidden></div>
+      </div>
+      <button id="textBtn" class="open-btn" type="button" title="Type a name or a word">
+        <span aria-hidden="true">🔤</span> Text
+      </button>
+      <span class="history card">
+        <button id="undoBtn" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>↶</button>
+        <button id="redoBtn" type="button" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>↷</button>
+        <button id="clearBtn" type="button" title="Take everything off the board (Undo brings it back)" aria-label="Clear board" disabled>🗑</button>
+      </span>
+    </div>
+
+    <div id="empty" class="empty">
+      <div class="empty-card">
+        <img src="/icon.svg" alt="" width="72" height="72">
+        <h1>Put a drawing on the board</h1>
+        <p>An SVG from Inkscape, Canva, Google Drawings or Tinkercad, or start with a shape.</p>
+        <div class="empty-actions">
+          <button id="emptyOpen" class="primary big" type="button">📂 Open drawing</button>
+          <button id="emptyShape" class="ghost" type="button">Start with a keychain tag</button>
+        </div>
+      </div>
+    </div>
+
+    <aside id="panel" class="panel card" aria-label="Design"></aside>
+    <aside id="previewPanel" class="panel card" aria-label="Preview" hidden></aside>
+
+    <section id="action" class="action card" aria-live="polite"></section>
+
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+    <div id="drop" class="drop-overlay" hidden><div>Drop to put it on the board</div></div>
+    <div id="busy" class="busy" hidden><div class="spinner" aria-hidden="true"></div><span id="busyText">Working…</span></div>
+  </main>
+
+  <footer class="footer">
+    <span>Internal district tool.</span>
+    <a href="/teacher/">Teacher</a>
+    <a href="https://uploadmycode.com" target="_blank" rel="noopener">uploadmycode</a>
+    <a href="https://uploadmylaser.com" target="_blank" rel="noopener">uploadmylaser</a>
+    <a href="https://uploadmymodel.com" target="_blank" rel="noopener">uploadmymodel</a>
+    <a href="https://teachchat.app" target="_blank" rel="noopener">teachChat</a>
+    <a href="https://daltonjfowler.com" target="_blank" rel="noopener">Made by Dalton Fowler</a>
+    <a href="https://github.com/daltonjfowler/uploadmycut" target="_blank" rel="noopener">Open source</a>
+  </footer>
+
+  <dialog id="helpDialog" class="dialog">
+    <form method="dialog">
+      <h2>How to cut</h2>
+      <ol class="steps">
+        <li><strong>Open a drawing</strong> (SVG) or pick a shape. Inkscape: <em>File → Save As → Plain SVG</em>. Canva: <em>Share → Download → SVG</em>. Google Drawings: <em>File → Download → SVG</em>. Text must be turned into paths first (Inkscape: <em>Path → Object to Path</em>).</li>
+        <li><strong>Place it on the board.</strong> Drag to move. Drag a corner to make it bigger or smaller. Drag the round knob to turn it. Stay inside the dashed line.</li>
+        <li><strong>Give each line a job.</strong> Click a line, then pick: <span class="job-chip cutout">Cut out</span> goes around the outside and cuts it free, <span class="job-chip hole">Cut hole</span> cuts inside the line, <span class="job-chip engrave">Engrave</span> follows the line, <span class="job-chip pocket">Pocket</span> digs out the inside.</li>
+        <li><strong>Fix the red spots.</strong> Red means the bit is too thick to fit there. Make the drawing bigger, or give that line a different job.</li>
+        <li><strong>Preview, then download</strong> your <code>.nc</code> file. Give it to your teacher. Your teacher runs every cut.</li>
+      </ol>
+      <h3>Keys</h3>
+      <table class="keys">
+        <tr><td>Move the selected drawing</td><td>Drag, or arrow keys (1 mm), Shift + arrows (10 mm)</td></tr>
+        <tr><td>Pick more lines</td><td>Shift + click</td></tr>
+        <tr><td>Zoom / slide the view</td><td>Mouse wheel / drag empty space. Double-click to fit.</td></tr>
+        <tr><td>Copy / delete</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd> · <kbd>Delete</kbd></td></tr>
+        <tr><td>Undo / redo</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> · <kbd>Ctrl</kbd>+<kbd>Y</kbd></td></tr>
+      </table>
+      <p class="note">Your drawing never leaves this Chromebook. The cut file is made right here in the browser.</p>
+      <div class="dialog-actions"><button class="primary" value="close">Got it</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="textDialog" class="dialog">
+    <form method="dialog" id="textForm">
+      <h2>Add text</h2>
+      <label class="name-field">Text
+        <input id="textInput" type="text" maxlength="30" autocomplete="off" spellcheck="false" placeholder="Your name" required></label>
+      <fieldset class="font-pick">
+        <legend class="sr-only">Letters</legend>
+        <label class="font-opt"><input type="radio" name="font" value="block" checked><span class="font-block">Block</span><small>Chunky. Good for engraving and pockets.</small></label>
+        <label class="font-opt"><input type="radio" name="font" value="script"><span class="font-script">Script</span><small>Joined-up. Cut out a name in one piece.</small></label>
+      </fieldset>
+      <label class="name-field">Capital letter height (mm)
+        <input id="textHeight" type="number" min="8" max="150" step="1" value="25"></label>
+      <p class="note">A 1/8 in bit needs letters at least about 15 mm tall. Smaller letters lose their thin parts.</p>
+      <p id="textError" class="msg bad" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" type="submit" formnovalidate>Cancel</button>
+        <button value="ok" class="primary" type="submit">Add text</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
