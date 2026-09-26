@@ -57,6 +57,10 @@ All cutting maths runs in the student's browser. There is no container, so no co
 8. Frame before every job (uploadmylaser's lesson): every cut file comes with a frame check file
    (router off, safe height, cut-area box). The phase 3 USB sender must refuse a job whose frame has
    not run. Never filter the USB port picker by vendor id.
+10. Clamp zones (per material, teacher page) are blocking: planCut warns `clamp` when any move below
+   the safe height comes within the bit radius + 2 mm of one, and checkGcode refuses a low move over
+   one. Tabs a student drags are stored on the part in local mm (`part.tabs`) and snap to the
+   nearest cut line within 25 mm; never let a drag remove a tab.
 9. Only public protocols: GRBL's own docs and MIT/BSD code (cncjs). Never capture, decode or copy
    Carbide Motion / Carbide Create traffic, files or behaviour (the LightBurn lesson, PLAN.md section 8).
 

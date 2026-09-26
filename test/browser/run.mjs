@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const base = process.argv[2] || 'http://127.0.0.1:8791/';
 let failed = 0;
-for (const t of ['e2e', 'text', 'autosave', 'teacher', 'usb', 'a11y']) {
+for (const t of ['e2e', 'text', 'autosave', 'tabs', 'teacher', 'usb', 'a11y']) {
   const file = fileURLToPath(new URL(`./${t}.test.mjs`, import.meta.url));
   const r = spawnSync(process.execPath, [file, base], { encoding: 'utf8', timeout: 300_000, env: process.env });
   const out = `${r.stdout}${r.stderr}`;

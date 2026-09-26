@@ -53,6 +53,7 @@ export function checkGcode(text, limits) {
   const box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
   const travelZ = limits.safeZ ?? 0;
+  const clamps = limits.clamps ?? [];
   const onBoard = (x, y) => x !== null && y !== null && x >= -EDGE_TOL_MM && y >= -EDGE_TOL_MM
     && x <= board.w + EDGE_TOL_MM && y <= board.h + EDGE_TOL_MM;
 
@@ -125,6 +126,20 @@ export function checkGcode(text, limits) {
     }
     if (sideways && Math.min(to.z, pos.z) < travelZ - 1e-6 && !reach.every(([x, y]) => onBoard(x, y))) {
       fail(n, `A move below the safe height (${travelZ} mm) goes outside the board, where clamps are.`);
+    }
+    // The teacher's clamp areas: nothing below the safe height may pass over one.
+    if (clamps.length && Math.min(to.z, pos.z ?? to.z) < travelZ - 1e-6) {
+      const fx = pos.x ?? to.x;
+      const fy = pos.y ?? to.y;
+      const steps = Math.max(1, Math.ceil(Math.hypot(to.x - fx, to.y - fy) / 0.5));
+      for (let k = 0; k <= steps && to.x !== null; k++) {
+        const x = fx + ((to.x - fx) * k) / steps;
+        const y = fy + ((to.y - fy) * k) / steps;
+        if (clamps.some((c) => x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h)) {
+          fail(n, 'A move below the safe height goes over a clamp.');
+          break;
+        }
+      }
     }
     if (motion === '0') {
       if (to.z < -1e-6) fail(n, 'A fast move (G0) goes down into the wood.');

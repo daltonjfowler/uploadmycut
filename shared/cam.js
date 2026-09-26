@@ -367,6 +367,24 @@ export function planCut({ shapes: input, board, bit, cut }) {
   }
   const pending = loops.slice();
   let from = [m.x ?? 0, m.y ?? 0];
+  const planTabs = []; // where each tab ends up, for the markers on the board
+  let loopNo = 0;
+  // Which loop each placed tab belongs to: its nearest tab-taking loop (so a tab dropped a little
+  // off the line still snaps onto it, and never onto two loops).
+  const tabbable = (a) => {
+    const b = boxOf(a.loop);
+    return useTabs && (a.kind === 'cutout' || a.kind === 'island' || ((a.kind === 'hole' || a.kind === 'void') && Math.min(b.maxX - b.minX, b.maxY - b.minY) > 25));
+  };
+  for (const a of loops) a.placed = [];
+  for (const p of cut.tabPoints ?? []) {
+    let best = null;
+    for (const a of loops) {
+      if (!tabbable(a)) continue;
+      const pr = projectOnLoop(a.loop, p);
+      if (pr.dist <= TAB_SNAP_MM + r && (!best || pr.dist < best.dist)) best = { a, p, dist: pr.dist };
+    }
+    if (best) best.a.placed.push(best.p);
+  }
   while (pending.length) {
     const deepest = Math.max(...pending.map((a) => a.depth));
     let bi = -1;
@@ -388,17 +406,61 @@ export function planCut({ shapes: input, board, bit, cut }) {
     const frees = a.kind === 'cutout' || a.kind === 'island';
     const wantsTabs = useTabs && (frees || ((a.kind === 'hole' || a.kind === 'void') && Math.min(b.w, b.h) > 25));
     let tabs = null;
+    let run = loop;
     if (wantsTabs) {
       const span = cut.tabs.width + bit.diameter; // the bit eats r on each side of the tab
-      // Fewer tabs on a small part; each needs its own stretch of the loop, clear of the seam.
-      const n = Math.min(tabCount(a.length), Math.floor(a.length / (2 * span)));
-      if (n >= 1) tabs = { z: tabZ, spans: tabCentres(a.length, n).map((c) => [c - span / 2, c + span / 2]) };
-      else if (frees) {
+      // Tabs the student placed (board points near this loop), else evenly spaced ones.
+      const placed = a.placed.map((p) => projectOnLoop(loop, p));
+      let centres;
+      if (placed.length) {
+        // Start the loop in the middle of the widest gap, so no tab sits on the start/end seam.
+        const s = placed.map((t) => t.s).sort((u, v) => u - v);
+        let gapAt = 0;
+        let gap = -1;
+        s.forEach((v, i) => {
+          const g = ((s[(i + 1) % s.length] - v + a.length) % a.length) || a.length;
+          if (g > gap) {
+            gap = g;
+            gapAt = v + g / 2;
+          }
+        });
+        run = rotateAtLength(loop, gapAt % a.length);
+        const s0 = gapAt % a.length;
+        centres = [];
+        for (const v of s.map((c) => (c - s0 + a.length) % a.length).sort((u, w) => u - w)) {
+          // Keep each tab whole, off the seam, and apart from the one before it.
+          if (v - span / 2 < 0.5 || v + span / 2 > a.length - 0.5) continue;
+          if (centres.length && v - centres[centres.length - 1] < span + 1) continue;
+          centres.push(v);
+        }
+      } else {
+        // Fewer tabs on a small part; each needs its own stretch of the loop, clear of the seam.
+        const n = Math.min(tabCount(a.length), Math.floor(a.length / (2 * span)));
+        centres = n >= 1 ? tabCentres(a.length, n) : [];
+      }
+      if (centres.length) {
+        tabs = { z: tabZ, spans: centres.map((c) => [c - span / 2, c + span / 2]) };
+        for (const c of centres) {
+          const [x, y] = pointAtLength(run, c);
+          planTabs.push({ x, y, loop: loopNo, placed: placed.length > 0 });
+        }
+      } else if (frees) {
         warnings.push({ code: 'noTabs', where: [loop], message: 'A piece is too small to hold with tabs, so it would come loose and could fly. Make it bigger, or give it another job.' });
       }
     }
-    profileLoop(m, loop, throughZs, tabs);
-    from = loop[0];
+    profileLoop(m, run, throughZs, tabs);
+    from = run[0];
+    loopNo++;
+  }
+
+  // ---- Clamps: the cut must stay clear of every clamp the teacher marked ----
+  const hitClamps = (cut.clamps ?? []).filter((c) => moveNearRect(m.list, c, r + CLAMP_CLEAR_MM, cut.safeZ));
+  if (hitClamps.length) {
+    warnings.push({
+      code: 'clamp',
+      where: hitClamps.map((c) => [[c.x, c.y], [c.x + c.w, c.y], [c.x + c.w, c.y + c.h], [c.x, c.y + c.h]]),
+      message: 'The cut goes into a clamp. Move your drawing away from the grey clamp areas.',
+    });
   }
 
   // ---- Stay on the board ----
@@ -413,7 +475,83 @@ export function planCut({ shapes: input, board, bit, cut }) {
   }
   if (!m.list.length) warnings.push({ code: 'empty', message: 'Nothing to cut yet. Give a shape a job.' });
 
-  return { moves: m.list, warnings, pocketFill, bitRadius: r };
+  return { moves: m.list, warnings, pocketFill, bitRadius: r, tabs: planTabs };
+}
+
+const TAB_SNAP_MM = 25; // a placed tab snaps to the nearest cut line within this distance
+const CLAMP_CLEAR_MM = 2; // keep the bit's edge this far from a clamp
+
+/** The point `s` mm along a closed loop. */
+export function pointAtLength(loop, s) {
+  let left = s;
+  for (let i = 0; i < loop.length; i++) {
+    const p = loop[i];
+    const q = loop[(i + 1) % loop.length];
+    const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (left <= len || i === loop.length - 1) {
+      const f = len ? Math.min(1, left / len) : 0;
+      return [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f];
+    }
+    left -= len;
+  }
+  return loop[0];
+}
+
+/** Nearest point of a closed loop to `pt`: how far along (s) and how far away (dist). */
+export function projectOnLoop(loop, pt) {
+  let best = { s: 0, dist: Infinity };
+  let s = 0;
+  for (let i = 0; i < loop.length; i++) {
+    const p = loop[i];
+    const q = loop[(i + 1) % loop.length];
+    const dx = q[0] - p[0];
+    const dy = q[1] - p[1];
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, ((pt[0] - p[0]) * dx + (pt[1] - p[1]) * dy) / len2)) : 0;
+    const d = Math.hypot(pt[0] - p[0] - t * dx, pt[1] - p[1] - t * dy);
+    if (d < best.dist) best = { s: s + t * Math.sqrt(len2), dist: d };
+    s += Math.sqrt(len2);
+  }
+  return best;
+}
+
+// The same loop, starting at the point `s` mm along it.
+function rotateAtLength(loop, s) {
+  let left = s;
+  for (let i = 0; i < loop.length; i++) {
+    const p = loop[i];
+    const q = loop[(i + 1) % loop.length];
+    const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (left < len) {
+      const f = left / len;
+      const start = [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f];
+      const rest = loop.slice(i + 1).concat(loop.slice(0, i + 1));
+      return f > 1e-6 ? [start, ...rest] : rest.slice(-1).concat(rest.slice(0, -1));
+    }
+    left -= len;
+  }
+  return loop;
+}
+
+/** True when any move below the safe height comes within `pad` mm of the rectangle. */
+export function moveNearRect(moves, c, pad, safeZ) {
+  const x0 = c.x - pad;
+  const y0 = c.y - pad;
+  const x1 = c.x + c.w + pad;
+  const y1 = c.y + c.h + pad;
+  const inside = (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+  let prev = null;
+  for (const v of moves) {
+    if (v.x !== null && v.z < safeZ - 1e-6) {
+      if (inside(v.x, v.y)) return true;
+      if (prev && prev.x !== null) {
+        const n = Math.ceil(Math.hypot(v.x - prev.x, v.y - prev.y) / 0.5);
+        for (let k = 1; k < n; k++) if (inside(prev.x + ((v.x - prev.x) * k) / n, prev.y + ((v.y - prev.y) * k) / n)) return true;
+      }
+    }
+    prev = v;
+  }
+  return false;
 }
 
 /** Rough run time in seconds: straight-line moves at their feed, rapids at the machine's speed. */

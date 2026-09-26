@@ -66,6 +66,30 @@ export const STARTING_FEEDS = {
 
 export const JOB_KEYS = ['cutout', 'hole', 'engrave', 'pocket'];
 
+// Where the clamps sit on a board of this material (the planner keeps every cut clear of them).
+export const CLAMP_LAYOUTS = {
+  none: 'Tape, no clamps',
+  corners: '4 corners',
+  sides: 'Left and right edges',
+  ends: 'Front and back edges',
+};
+
+/** The clamp areas on the board, as rectangles in board mm (front-left corner = 0, 0). */
+export function clampRects(material) {
+  const s = material.clampSize ?? 30;
+  const { w, h } = material;
+  switch (material.clampLayout) {
+    case 'corners':
+      return [{ x: 0, y: 0, w: s, h: s }, { x: w - s, y: 0, w: s, h: s }, { x: 0, y: h - s, w: s, h: s }, { x: w - s, y: h - s, w: s, h: s }];
+    case 'sides':
+      return [{ x: 0, y: h / 2 - s / 2, w: s, h: s }, { x: w - s, y: h / 2 - s / 2, w: s, h: s }];
+    case 'ends':
+      return [{ x: w / 2 - s / 2, y: 0, w: s, h: s }, { x: w / 2 - s / 2, y: h - s, w: s, h: s }];
+    default:
+      return [];
+  }
+}
+
 // Hard limits nobody can set past, not even the teacher page.
 export const LIMITS = {
   maxFeed: 2500,
@@ -80,6 +104,7 @@ export const LIMITS = {
   marginMm: [2, 30],
   stepover: [0.2, 0.6],
   thickness: [2, 40],
+  clampSize: [10, 80],
   boardMin: 20,
   materials: 8,
   labelLength: 30,
@@ -153,7 +178,11 @@ export function validateClassConfig(input) {
       plunge: inRange(e, 'Plunge', m?.plunge, [20, LIMITS.maxPlunge]),
       depthPerPass: inRange(e, 'Depth per pass', m?.depthPerPass, LIMITS.depthPerPass),
       dial: inRange(e, 'Router dial', m?.dial, [1, 6]),
+      // Older saved setups have no clamp fields: they mean tape.
+      clampLayout: m?.clampLayout === undefined ? 'none' : Object.hasOwn(CLAMP_LAYOUTS, m.clampLayout) ? m.clampLayout : (e.push('clamps'), 'none'),
+      clampSize: m?.clampSize === undefined ? 30 : inRange(e, 'Clamp size', m.clampSize, LIMITS.clampSize),
     };
+    if (mat.clampLayout !== 'none' && mat.clampSize * 2 >= Math.min(mat.w, mat.h)) e.push('the clamps would cover the whole board');
     for (const x of e) errors.push(`Material ${i + 1}: ${x}`);
     return mat;
   });
@@ -195,6 +224,7 @@ export function cutRules(config, material) {
     marginMm: config.marginMm,
     climb: config.climb,
     tabs: { ...config.tabs },
+    clamps: clampRects(material),
   };
 }
 
@@ -206,6 +236,7 @@ export function checkLimits(config, material) {
     maxFeed: Math.max(material.feed, material.plunge),
     maxRpm: 32000, // above any hand-dialled router; M3 S is only a prompt for the teacher
     safeZ: config.safeZ,
+    clamps: clampRects(material),
     maxLines: LIMITS.maxLines,
   };
 }

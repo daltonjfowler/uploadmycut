@@ -11,20 +11,20 @@ import { textLines } from './text.js';
 import { loadDesign, saveDesign } from './design-store.js';
 import { SHAPES } from '../../shared/shapes.js';
 import {
-  cloneForCopy, designShapes, fitOnBoard, makePart, partBounds, partSize, placeOnBoard, revivePart, snapshot, withBorder,
+  cloneForCopy, designShapes, designTabPoints, fitOnBoard, makePart, partBounds, partSize, placeOnBoard, revivePart, snapshot, toBoard, toLocal, withBorder,
 } from '../../shared/design.js';
 import { estimateSeconds, JOB_LABELS, planCut } from '../../shared/cam.js';
 import { cutArea, writeFrameGcode, writeGcode } from '../../shared/gcode.js';
 import { checkGcode } from '../../shared/check-gcode.js';
 import {
-  BITS, DEFAULT_CLASS_CONFIG, MACHINES, ROUTERS, checkLimits, cutRules, ncFileName, rpmFor, validateClassConfig,
+  BITS, DEFAULT_CLASS_CONFIG, MACHINES, ROUTERS, checkLimits, clampRects, cutRules, ncFileName, rpmFor, validateClassConfig,
 } from '../../shared/settings.js';
 
 const MATERIAL_KEY = 'umc.material';
 const HISTORY_MAX = 80;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 // These stop the Preview: the file would be wrong or unsafe.
-const BLOCKING = new Set(['offBoard', 'empty', 'tabs', 'noTabs']);
+const BLOCKING = new Set(['offBoard', 'empty', 'tabs', 'noTabs', 'clamp']);
 
 const JOB_HELP = {
   cutout: 'Cuts around the outside and frees the part',
@@ -135,6 +135,40 @@ function addPart(part) {
   fitOnBoard(part, board(), keepOut());
   state.parts.push(part);
   state.selected = { partId: part.id, lines: new Set(part.lines.map((_, i) => i)) };
+  changed();
+}
+
+// The part a board point belongs to: the smallest one whose box (grown by the bit and a little)
+// holds it. Tabs sit on the bit's path, just outside the drawn line.
+function partAt(pt) {
+  const pad = bit().diameter + 5;
+  let best = null;
+  for (const p of state.parts) {
+    const b = partBounds(p);
+    if (pt[0] < b.minX - pad || pt[0] > b.maxX + pad || pt[1] < b.minY - pad || pt[1] > b.maxY + pad) continue;
+    if (!best || b.w * b.h < best.a) best = { p, a: b.w * b.h };
+  }
+  return best?.p ?? null;
+}
+
+// A tab was dragged: every tab of that cut line becomes a placed tab (so the others stay where
+// they are), with the dragged one at its new spot. The planner snaps them onto the line.
+function moveTab(i, at) {
+  const tabs = state.plan?.tabs ?? [];
+  const t = tabs[i];
+  if (!t) return;
+  const same = tabs.filter((x) => x.loop === t.loop);
+  const snap = 1; // the planner reports each tab exactly where it put the stored point
+  const part = partAt([t.x, t.y]);
+  if (!part) return;
+  record();
+  // Drop this line's old placed tabs, keep the part's tabs on its other lines.
+  const others = (part.tabs ?? []).filter((q) => {
+    const [bx, by] = toBoard(part, [q])[0];
+    return !same.some((x) => Math.hypot(bx - x.x, by - x.y) <= snap);
+  });
+  const pts = same.map((x) => (x === t ? at : [x.x, x.y]));
+  part.tabs = [...others, ...pts.map((pt) => toLocal(part, pt))];
   changed();
 }
 
@@ -286,7 +320,7 @@ async function planNow() {
   clearTimeout(planTimer);
   planTimer = 0;
   const r = rules();
-  const args = { shapes: designShapes(state.parts, r.pocketDepth), board: board(), bit: bit(), cut: r };
+  const args = { shapes: designShapes(state.parts, r.pocketDepth), board: board(), bit: bit(), cut: { ...r, tabPoints: designTabPoints(state.parts) } };
   let plan;
   try {
     plan = await planInWorker(args);
@@ -296,6 +330,7 @@ async function planNow() {
   }
   state.plan = plan;
   view.setWarnings(plan.warnings);
+  view.setTabs(plan.tabs ?? []);
   renderAction();
   return plan;
 }
@@ -305,6 +340,11 @@ function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => saveDesign({ parts: state.parts, fileName: state.fileName }), 800);
 }
+// Closing or reloading the tab saves at once, not 0.8 s later.
+addEventListener('pagehide', () => {
+  clearTimeout(saveTimer);
+  saveDesign({ parts: state.parts, fileName: state.fileName });
+});
 
 function changed() {
   state.result = null;
@@ -452,6 +492,7 @@ function renderPanel() {
           }).join('')}
         </div>
         ${picked < part.lines.length ? '<button id="pickAll" class="linkbtn" type="button">Pick all lines of this drawing</button>' : ''}
+        ${part.tabs?.length ? '<button id="resetTabs" class="linkbtn" type="button" title="Let the planner place the tabs again">↺ Reset tabs</button>' : ''}
       </div>`;
     if (part.jobs.includes('pocket')) {
       const max = Math.max(0.5, Math.min(state.config.pocketMaxDepth, m.t - 1));
@@ -494,6 +535,7 @@ function bindPanel(part) {
   on('rot90', 'click', () => transformSelected({ rotation: (part.rotation + 90) % 360 }));
   on('copy', 'click', copySelected);
   on('delete', 'click', deleteSelected);
+  on('resetTabs', 'click', () => transformSelected({ tabs: null }));
   on('pickAll', 'click', () => {
     state.selected = { partId: part.id, lines: new Set(part.lines.map((_, i) => i)) };
     changed();
@@ -649,10 +691,12 @@ const view = new BoardView($('#board'), {
   onTransformStart: () => record(),
   onTransform(part, changes) {
     Object.assign(part, changes);
+    view.setTabs([]); // the markers come back with the next plan
     state.result = null;
     view.setParts(state.parts, state.selected);
   },
   onTransformEnd: () => changed(),
+  onTabMoved: (i, at) => moveTab(i, at),
 });
 
 initThemeButton($('#theme'));
@@ -731,6 +775,7 @@ $('#material').addEventListener('change', (e) => {
     localStorage.setItem(MATERIAL_KEY, state.materialId);
   } catch { /* storage blocked */ }
   view.setBoard(board(), state.config.marginMm);
+  view.setClamps(clampRects(material()));
   changed();
 });
 
@@ -792,6 +837,7 @@ document.addEventListener('keydown', (e) => {
 await loadConfig();
 renderMaterials();
 view.setBoard(board(), state.config.marginMm);
+view.setClamps(clampRects(material()));
 const saved = await loadDesign();
 if (saved) {
   const budget = { points: 400_000 };

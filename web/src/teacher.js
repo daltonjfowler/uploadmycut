@@ -6,7 +6,7 @@ import './teacher.css';
 import { initThemeButton } from './theme.js';
 import { $, esc } from './dom.js';
 import {
-  BITS, DEFAULT_CLASS_CONFIG, JOB_KEYS, MACHINES, MATERIAL_KINDS, ROUTERS, STARTING_FEEDS, LIMITS,
+  BITS, CLAMP_LAYOUTS, DEFAULT_CLASS_CONFIG, JOB_KEYS, MACHINES, MATERIAL_KINDS, ROUTERS, STARTING_FEEDS, LIMITS,
 } from '../../shared/settings.js';
 import { JOB_LABELS } from '../../shared/cam.js';
 
@@ -32,7 +32,7 @@ async function api(method, body) {
   return { ok: r.ok, status: r.status, data };
 }
 
-const COLUMN = { t: 'Thickness mm', w: 'Width mm', h: 'Length mm', feed: 'Feed mm/min', plunge: 'Plunge mm/min', depthPerPass: 'Depth per pass mm', dial: 'Router dial' };
+const COLUMN = { clampSize: 'Clamp size mm', t: 'Thickness mm', w: 'Width mm', h: 'Length mm', feed: 'Feed mm/min', plunge: 'Plunge mm/min', depthPerPass: 'Depth per pass mm', dial: 'Router dial' };
 
 function matRow(m, i) {
   const n = i + 1;
@@ -42,6 +42,7 @@ function matRow(m, i) {
     <td><select data-f="kind" aria-label="Material ${n} kind">${options(MATERIAL_KINDS)}</select></td>
     ${num('t', m.t, 0.1)}${num('w', m.w, 1)}${num('h', m.h, 1)}
     ${num('feed', m.feed, 10)}${num('plunge', m.plunge, 10)}${num('depthPerPass', m.depthPerPass, 0.05)}${num('dial', m.dial, 0.5)}
+    <td><select data-f="clampLayout" aria-label="Material ${n} clamps">${options(CLAMP_LAYOUTS)}</select></td>${num('clampSize', m.clampSize ?? 30, 1)}
     <td class="nowrap"><button type="button" data-act="start" title="Fill feed, plunge, per pass and dial for this bit and kind">Starting values</button>
       <button type="button" data-act="del" class="danger" title="Remove">✕</button></td>
   </tr>`;
@@ -55,6 +56,7 @@ function fill(c) {
   $('#matRows').innerHTML = c.materials.map(matRow).join('');
   [...$('#matRows').rows].forEach((row, i) => {
     row.querySelector('[data-f="kind"]').value = c.materials[i].kind;
+    row.querySelector('[data-f="clampLayout"]').value = c.materials[i].clampLayout ?? 'none';
   });
   for (const cb of document.querySelectorAll('[data-job]')) cb.checked = c.jobs[cb.dataset.job] !== false;
   $('#tabW').value = c.tabs.width;

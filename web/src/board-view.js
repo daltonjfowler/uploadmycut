@@ -11,6 +11,7 @@ import { bounds } from '../../shared/geometry.js';
 import { isDark, onThemeChange } from './theme.js';
 
 const HANDLE_PX = 9;
+const TAB_PX = 6; // tab marker radius on screen
 const ROTATE_GAP_PX = 28;
 
 export const JOB_COLOURS = {
@@ -68,6 +69,8 @@ export class BoardView {
     this.parts = [];
     this.selected = null; // { partId, lines: Set<number> }
     this.warnings = [];
+    this.clamps = []; // teacher's clamp areas, board rects
+    this.tabs = []; // where the planner put each tab: { x, y, loop, placed }
     this.mode = 'design';
     this.preview = null; // { moves, image (canvas), showPath }
     this.view = { s: 1, ox: 0, oy: 0 };
@@ -98,6 +101,16 @@ export class BoardView {
   setParts(parts, selected) {
     this.parts = parts;
     this.selected = selected;
+    this.draw();
+  }
+
+  setClamps(clamps) {
+    this.clamps = clamps;
+    this.draw();
+  }
+
+  setTabs(tabs) {
+    this.tabs = tabs;
     this.draw();
   }
 
@@ -195,10 +208,12 @@ export class BoardView {
       ctx.setLineDash([]);
     }
 
+    this.paintClamps(c, world);
     if (this.mode === 'design') {
       for (const part of this.parts) this.paintPart(part, c, world);
       this.paintWarnings(c, world);
       this.paintSelection(c);
+      this.paintTabs(c);
     } else {
       if (this.preview?.showPath) this.paintMoves(c, world);
       this.paintWarnings(c, world);
@@ -258,6 +273,74 @@ export class BoardView {
       ctx.stroke(paths[i]);
     });
     ctx.setLineDash([]);
+  }
+
+  paintClamps(c, world) {
+    if (!this.clamps.length) return;
+    const { ctx, view } = this;
+    world();
+    for (const k of this.clamps) {
+      ctx.fillStyle = c.dark ? 'rgba(160,170,180,.28)' : 'rgba(60,70,80,.22)';
+      ctx.fillRect(k.x, k.y, k.w, k.h);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(k.x, k.y, k.w, k.h);
+      ctx.clip();
+      ctx.beginPath();
+      for (let d = -k.h; d < k.w; d += 4) {
+        ctx.moveTo(k.x + d, k.y);
+        ctx.lineTo(k.x + d + k.h, k.y + k.h);
+      }
+      ctx.lineWidth = 1 / view.s;
+      ctx.strokeStyle = c.dark ? 'rgba(220,225,230,.35)' : 'rgba(40,45,50,.35)';
+      ctx.stroke();
+      ctx.restore();
+      ctx.setLineDash([4 / view.s, 3 / view.s]);
+      ctx.lineWidth = 1.2 / view.s;
+      ctx.strokeStyle = c.muted;
+      ctx.strokeRect(k.x, k.y, k.w, k.h);
+      ctx.setLineDash([]);
+    }
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = c.ink;
+    for (const k of this.clamps) {
+      const [sx, sy] = this.toScreen([k.x + k.w / 2, k.y + k.h / 2]);
+      if (k.w * view.s > 34) ctx.fillText('clamp', sx, sy + 4);
+    }
+  }
+
+  tabAt(sp) {
+    for (let i = this.tabs.length - 1; i >= 0; i--) {
+      const [x, y] = this.toScreen([this.tabs[i].x, this.tabs[i].y]);
+      if (Math.hypot(sp[0] - x, sp[1] - y) <= TAB_PX + 3) return i;
+    }
+    return -1;
+  }
+
+  paintTabs(c) {
+    if (!this.tabs.length) return;
+    const { ctx } = this;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.tabs.forEach((t, i) => {
+      const drag = this.drag?.kind === 'tab' && this.drag.i === i && this.drag.at;
+      const [x, y] = this.toScreen(drag ? this.drag.at : [t.x, t.y]);
+      ctx.beginPath();
+      ctx.arc(x, y, TAB_PX, 0, Math.PI * 2);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = c.dark ? '#121314' : '#ffffff';
+      ctx.stroke();
+      // A small bridge mark: the wood that stays.
+      ctx.beginPath();
+      ctx.moveTo(x - 3, y);
+      ctx.lineTo(x + 3, y);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#3b2600';
+      ctx.stroke();
+    });
   }
 
   paintWarnings(c, world) {
@@ -383,6 +466,13 @@ export class BoardView {
       this.canvas.setPointerCapture(e.pointerId);
       return;
     }
+    // Tabs first: they sit on the cut line, on top of everything.
+    const ti = this.tabAt(sp);
+    if (ti >= 0) {
+      this.drag = { kind: 'tab', i: ti, at: null };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
     const part = this.parts.find((p) => p.id === this.selected?.partId);
     if (part) {
       const h = this.handles(part);
@@ -416,6 +506,11 @@ export class BoardView {
       this.updateCursor(sp);
       return;
     }
+    if (d.kind === 'tab') {
+      d.at = this.toWorld(...sp);
+      this.draw();
+      return;
+    }
     if (d.kind === 'pan') {
       if (Math.hypot(sp[0] - d.start[0], sp[1] - d.start[1]) < 3 && !d.panning) return;
       d.panning = true;
@@ -446,6 +541,10 @@ export class BoardView {
     this.drag = null;
     if (this.canvas.hasPointerCapture?.(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
     if (!d) return;
+    if (d.kind === 'tab') {
+      if (d.at) this.handlers.onTabMoved?.(d.i, d.at);
+      return;
+    }
     if (d.kind === 'pan' && !d.panning && this.mode === 'design') this.handlers.onPick?.(null, false);
     if ((d.kind === 'move' && d.moved) || d.kind === 'scale' || d.kind === 'rotate') this.handlers.onTransformEnd?.();
   }
@@ -463,6 +562,10 @@ export class BoardView {
 
   updateCursor(sp) {
     if (this.mode !== 'design') {
+      this.canvas.style.cursor = 'grab';
+      return;
+    }
+    if (this.tabAt(sp) >= 0) {
       this.canvas.style.cursor = 'grab';
       return;
     }

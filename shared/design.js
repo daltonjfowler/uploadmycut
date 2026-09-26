@@ -5,7 +5,11 @@
 // Each line has its own job (shared/cam.js JOBS).
 //
 //   part = { id, name, kind, fill, lines: [{ points, closed }], jobs: ['cutout', ...], pocketDepth,
-//            x, y, scale, rotation (degrees, counter-clockwise), mirror }
+//            x, y, scale, rotation (degrees, counter-clockwise), mirror, tabs }
+//
+// `tabs` (optional) are tab spots the student dragged, in part-local mm, so they move with the
+// part. null = the planner places tabs by itself. Always replaced, never changed in place (undo
+// snapshots share it).
 //
 // `fill` says which areas a set of closed lines encloses: 'nonzero' for text (fonts wind letter
 // centres the other way round), 'evenodd' for drawings (safest guess for an unknown SVG).
@@ -35,6 +39,7 @@ export function makePart({ name, kind, lines, flipY = true, fill = 'evenodd' }) 
     scale: 1,
     rotation: 0,
     mirror: false,
+    tabs: null,
   };
 }
 
@@ -150,6 +155,11 @@ export function partBounds(part) {
 export function partSize(part) {
   const b = bounds(part.lines.map((l) => l.points));
   return { w: b.w * part.scale, h: b.h * part.scale };
+}
+
+/** Every tab spot students placed, in board mm, for planCut's cut.tabPoints. */
+export function designTabPoints(parts) {
+  return parts.flatMap((p) => (p.tabs?.length ? toBoard(p, p.tabs) : []));
 }
 
 /** Every line of every part in board mm, ready for planCut. Mirroring flips the winding back. */
@@ -270,6 +280,11 @@ export function revivePart(raw, budget = { points: MAX_SAVED_POINTS }) {
   if (!raw.jobs.every((j) => SAVED_JOBS.has(j))) return null;
   if (![raw.x, raw.y, raw.scale, raw.rotation].every(num) || !(raw.scale > 0)) return null;
   if (raw.pocketDepth !== null && raw.pocketDepth !== undefined && !num(raw.pocketDepth)) return null;
+  let tabs = null;
+  if (Array.isArray(raw.tabs)) {
+    if (raw.tabs.length > 64 || !raw.tabs.every((p) => Array.isArray(p) && p.length === 2 && num(p[0]) && num(p[1]))) return null;
+    tabs = raw.tabs.map((p) => [p[0], p[1]]);
+  }
   return {
     id: `p${nextId++}`,
     name: String(raw.name ?? 'drawing').slice(0, 60),
@@ -283,9 +298,10 @@ export function revivePart(raw, budget = { points: MAX_SAVED_POINTS }) {
     scale: raw.scale,
     rotation: raw.rotation,
     mirror: raw.mirror === true,
+    tabs,
   };
 }
 
 export function cloneForCopy(part) {
-  return { ...part, id: `p${nextId++}`, jobs: part.jobs.slice() };
+  return { ...part, id: `p${nextId++}`, jobs: part.jobs.slice(), tabs: part.tabs ? part.tabs.map((p) => p.slice()) : null };
 }

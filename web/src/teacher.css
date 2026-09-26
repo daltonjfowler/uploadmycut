@@ -20,6 +20,7 @@ select { border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; ba
 .mats td input[type="number"] { width: 66px; }
 .mats td input[data-f="label"] { min-width: 120px; }
 .mats td select { width: 130px; }
+.mats td select[data-f="clampLayout"] { width: 150px; }
 .mats td button { padding: 5px 7px; font-size: .82rem; }
 .nowrap { white-space: nowrap; }
 .save-row { justify-content: flex-end; }
