@@ -41,6 +41,42 @@ for (const site of sites) {
   check(`${site}: no page errors`, errors.length === 0, errors.join(' | '));
   await page.close();
 }
+// Phones: tap to wake, tap to stop, stops by itself after 6 s, and a tap never follows a link.
+for (const site of sites) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(`https://${site}.com/`);
+  const logo = page.locator('img[data-logo]').first();
+  await logo.waitFor();
+  const alive = () => page.evaluate(() => !!document.querySelector('img[data-logo] + svg'));
+  await logo.tap();
+  await page.waitForTimeout(600);
+  check(`${site} phone: tap wakes it`, await alive());
+  await page.locator('img[data-logo] + svg').tap();
+  await page.waitForTimeout(300);
+  check(`${site} phone: tap again stops it`, !(await alive()) && (await logo.isVisible()));
+  await logo.tap();
+  await page.waitForTimeout(600);
+  check(`${site} phone: wakes again`, await alive());
+  await page.waitForTimeout(6200);
+  check(`${site} phone: stops by itself after 6 s`, !(await alive()));
+  check(`${site} phone: no page errors`, errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}
+{
+  // uploadmycut's teacher page has the logo inside a link home: a tap animates, it does not leave.
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  await page.goto('https://uploadmycut.com/teacher/');
+  await page.locator('img[data-logo]').first().tap();
+  await page.waitForTimeout(700);
+  check('phone: logo inside a link animates and stays on the page', new URL(page.url()).pathname === '/teacher/'
+    && (await page.evaluate(() => !!document.querySelector('img[data-logo] + svg'))), page.url());
+  await ctx.close();
+}
+
 // Less motion asked for: never wakes.
 const calm = await browser.newPage({ reducedMotion: 'reduce' });
 await calm.goto('https://uploadmycut.com/');
