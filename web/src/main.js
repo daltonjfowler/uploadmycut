@@ -14,7 +14,7 @@ import {
   cloneForCopy, designShapes, fitOnBoard, makePart, partBounds, partSize, placeOnBoard, revivePart, snapshot, withBorder,
 } from '../../shared/design.js';
 import { estimateSeconds, JOB_LABELS, planCut } from '../../shared/cam.js';
-import { writeGcode } from '../../shared/gcode.js';
+import { cutArea, writeFrameGcode, writeGcode } from '../../shared/gcode.js';
 import { checkGcode } from '../../shared/check-gcode.js';
 import {
   BITS, DEFAULT_CLASS_CONFIG, MACHINES, ROUTERS, checkLimits, cutRules, ncFileName, rpmFor, validateClassConfig,
@@ -345,6 +345,10 @@ async function setStage(stage) {
   showStage();
 }
 
+function frameFileName() {
+  return ncFileName(state.fileName).replace(/\.nc$/, '-frame.nc');
+}
+
 function buildResult(plan) {
   const m = material();
   const b = bit();
@@ -362,7 +366,18 @@ function buildResult(plan) {
   const check = checkGcode(gcode, checkLimits(state.config, m));
   const seconds = estimateSeconds(plan.moves, feeds);
   const image = carveImage(plan.moves, board(), plan.bitRadius, { dark: isDark() });
-  state.result = { gcode, check, seconds, image, feeds };
+  // The frame check (uploadmylaser's lesson: frame before every job): router off, trace the cut area.
+  const box = cutArea(plan.moves, plan.bitRadius, board());
+  const frame = box
+    ? writeFrameGcode({
+      box,
+      safeZ: state.config.safeZ,
+      feed: m.feed,
+      notes: [`uploadmycut ${frameFileName()} FRAME CHECK`, 'Router OFF. The bit traces the cut area in the air', notes[3]],
+    })
+    : null;
+  const frameCheck = frame ? checkGcode(frame, checkLimits(state.config, m)) : null;
+  state.result = { gcode, check, seconds, image, feeds, frame, frameCheck };
 }
 
 function showStage() {
@@ -543,6 +558,8 @@ function renderPreview() {
       <label class="name-field">File name
         <input id="fileName" type="text" maxlength="40" value="${esc(state.fileName)}" placeholder="my-cut" spellcheck="false"></label>
       <button id="download" class="primary big wide" type="button" ${r.check.ok ? '' : 'disabled'}>⬇ Download ${esc(ncFileName(state.fileName))}</button>
+      <button id="downloadFrame" class="wide" type="button" ${r.check.ok && r.frameCheck?.ok ? '' : 'disabled'}>⬚ Frame check: ${esc(frameFileName())}</button>
+      <p class="note">The frame check file moves the bit around the cut area high in the air, router off, so your teacher sees where it cuts before the real file runs.</p>
     </div>
     <div class="section">
       <h2>For the teacher</h2>
@@ -550,6 +567,7 @@ function renderPreview() {
         <li>Clamp or tape the board: ${esc(m.label)} (${fmt(m.w)} × ${fmt(m.h)} mm). Clamps stay out of the cut.</li>
         <li>Put in the ${esc(bit().short)}.</li>
         <li>Carbide Motion: Load File, then zero X and Y on the <strong>front-left corner</strong> and Z on the <strong>top</strong> of the board.</li>
+        <li><strong>Frame first:</strong> run <code>${esc(frameFileName())}</code> with the router off. The bit traces the cut area ${esc(String(state.config.safeZ))} mm above the board. Check it stays on the board and clears every clamp.</li>
         <li>Router dial <strong>${esc(String(m.dial))}</strong>. Start the job, switch on the router when asked.</li>
       </ol>
       <p class="safety"><strong>Stay at the machine.</strong> Eye and ear protection on. Pause or stop in Carbide Motion does not stop the router: switch the router off too.</p>
@@ -562,25 +580,29 @@ function renderPreview() {
     state.fileName = e.target.value;
     scheduleSave();
     $('#download').textContent = `⬇ Download ${ncFileName(state.fileName)}`;
+    $('#downloadFrame').textContent = `⬚ Frame check: ${frameFileName()}`;
   });
   $('#download').addEventListener('click', download);
+  $('#downloadFrame').addEventListener('click', () => download('frame'));
 }
 
-function download() {
+function download(which = 'cut') {
   // Rebuild the header with the name as typed now.
   buildResult(state.plan);
-  if (!state.result.check.ok) {
+  const frame = which === 'frame';
+  if (!state.result.check.ok || (frame && !state.result.frameCheck?.ok)) {
     renderPreview();
     return;
   }
-  const name = ncFileName(state.fileName);
-  const url = URL.createObjectURL(new Blob([state.result.gcode], { type: 'text/plain' }));
+  const name = frame ? frameFileName() : ncFileName(state.fileName);
+  const text = frame ? state.result.frame : state.result.gcode;
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
   const a = el('a', { href: url, download: name });
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  toast(`Saved ${name}. Give it to your teacher.`);
+  toast(frame ? `Saved ${name}. Your teacher runs it first, router off.` : `Saved ${name}. Give it to your teacher.`);
 }
 
 // ---- small UI helpers ----

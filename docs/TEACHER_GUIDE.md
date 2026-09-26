@@ -45,9 +45,11 @@ Students get a new setup when they reload the page.
 3. Carbide Motion: *Load File*.
 4. Jog to the **front-left corner** of the board and zero X and Y there. Zero Z on the **top** of
    the board.
-5. Set the router dial to the number in the file's steps (also in the file's first lines).
-6. Start. When Carbide Motion asks, switch the router on.
-7. After the cut, router off, vacuum, then free the parts from their tabs.
+5. **Frame first:** run the `-frame.nc` file that came with it, router off. The bit traces the cut
+   area at the safe height. Check it stays on the board and clears every clamp.
+6. Set the router dial to the number in the file's steps (also in the file's first lines).
+7. Start. When Carbide Motion asks, switch the router on.
+8. After the cut, router off, vacuum, then free the parts from their tabs.
 
 Every file passed a check in the browser before download: it stays on the board, is no deeper than
 the board plus the cut-below depth, uses the class speeds, and has no machine settings, tool

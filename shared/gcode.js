@@ -63,3 +63,38 @@ export function writeGcode({ moves, feeds, safeZ, notes = [] }) {
   out.push('M5', 'M30', '');
   return out.join('\n');
 }
+
+/**
+ * Where the cut goes, as a box on the board: every cutting move's bit centre, grown by the bit
+ * radius, kept on the board. null when nothing cuts.
+ */
+export function cutArea(moves, r, board) {
+  const deep = moves.filter((v) => v.x !== null && v.z < 0);
+  if (!deep.length) return null;
+  const clamp = (v, hi) => Math.min(Math.max(v, 0), hi);
+  return {
+    minX: clamp(Math.min(...deep.map((v) => v.x)) - r, board.w),
+    minY: clamp(Math.min(...deep.map((v) => v.y)) - r, board.h),
+    maxX: clamp(Math.max(...deep.map((v) => v.x)) + r, board.w),
+    maxY: clamp(Math.max(...deep.map((v) => v.y)) + r, board.h),
+  };
+}
+
+/**
+ * The frame check (uploadmylaser's lesson: frame before every job). The bit traces the cut
+ * area's box at the safe height, with the router OFF (no M3), and comes back to the start: the
+ * teacher sees where the cut goes and that it clears the clamps before the real file runs.
+ */
+export function writeFrameGcode({ box, safeZ, feed, notes = [] }) {
+  const out = [];
+  for (const n of notes) {
+    const c = commentText(n);
+    if (c) out.push(`(${c})`);
+  }
+  out.push('G90 G94', 'G17', 'G21', `G0 Z${num(safeZ)}`, 'M5');
+  const corners = [[box.minX, box.minY], [box.maxX, box.minY], [box.maxX, box.maxY], [box.minX, box.maxY], [box.minX, box.minY]];
+  out.push(`G0 X${num(corners[0][0])} Y${num(corners[0][1])}`);
+  corners.slice(1).forEach(([x, y], i) => out.push(`G1 X${num(x)} Y${num(y)}${i === 0 ? ` F${Math.round(feed)}` : ''}`));
+  out.push('M30', '');
+  return out.join('\n');
+}

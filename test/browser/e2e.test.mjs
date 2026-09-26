@@ -86,6 +86,12 @@ const r = checkGcode(gcode, { board: { w: 140, h: 200, t: 19 }, maxThroughMm: 0.
 check('downloaded file passes the checker', r.ok, JSON.stringify(r.errors));
 check('file header', /^\(uploadmycut Keychain-Sign\.nc\)\n/.test(gcode) && gcode.includes('M3 S17000'), gcode.slice(0, 300));
 check('cuts through 19 mm + 0.3', r.stats.minZ === -19.3, String(r.stats.minZ));
+const [dlf] = await Promise.all([page.waitForEvent('download'), page.click('#downloadFrame')]);
+check('frame file name', dlf.suggestedFilename() === 'Keychain-Sign-frame.nc', dlf.suggestedFilename());
+await dlf.saveAs(`${OUT}${dlf.suggestedFilename()}`);
+const frame = readFileSync(`${OUT}${dlf.suggestedFilename()}`, 'utf8');
+check('frame file: router off, stays up, passes the checker', !/\bM0?3\b/.test(frame) && !/Z-/.test(frame)
+  && checkGcode(frame, { board: { w: 140, h: 200, t: 19 }, maxThroughMm: 0.35, maxFeed: 900, safeZ: 5 }).ok, frame.slice(0, 300));
 
 // Dark theme screenshot of the same preview.
 await page.click('#theme'); // system -> light

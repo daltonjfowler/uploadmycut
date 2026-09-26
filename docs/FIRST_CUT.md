@@ -3,6 +3,10 @@
 Goal for Monday 2026-09-28: learn what the machine is, prove it runs a known-good file, then run
 one uploadmycut file. Tick each line. Anything surprising: stop and take a photo.
 
+## 0. Before Monday
+
+- [ ] Ask district IT to allow uploadmycut.com (for uploadmycode they only had to unblock the site).
+
 ## A. Look (machine off, unplugged)
 
 - [ ] Photo of the Z axis: **belt** on the Z (Shapeoko 3) or a **screw** (Z-Plus / HDZ).
@@ -33,6 +37,7 @@ one uploadmycut file. Tick each line. Anything surprising: stop and take a photo
 - [ ] Zero X/Y at the board's front-left corner, and Z **30 mm above** the board top, so even the
       deepest move stays over 20 mm in the air.
 - [ ] Run it. Watch that it moves inside the board outline and goes down and up where expected.
+- [ ] Also run the `-frame.nc` file: it should trace the box around the cut, never going down.
 
 ## D. Real cut
 

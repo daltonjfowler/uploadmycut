@@ -56,7 +56,8 @@ teacher cuts or sands them off after.
 
 Press **Preview cut**. You see the board as it will look after cutting, and about how long it
 takes. Tick *Show the bit's path* to see where the bit goes. Type a file name and press
-**Download**. Give the `.nc` file to your teacher.
+**Download**. Also download the **frame check** file: your teacher runs it first, with the router
+off, to see where the cut goes. Give both `.nc` files to your teacher.
 
 Your design stays in this browser, so a reloaded tab brings it back. The trash button empties the
 board (Undo brings it back).

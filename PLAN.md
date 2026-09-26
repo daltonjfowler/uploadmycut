@@ -79,8 +79,8 @@ Those come only from the teacher.
 |---|---|---|
 | 0 | School facts (§6). Clear the bed. Run one Carbide Create job by hand so we have a known-good file. | Dalton at school |
 | 1 | Student page: open SVG / text / shapes, jobs, checks, preview, download `.nc`. Teacher page. **Built, local only.** Deploy at uploadmycut.com. | Domain bought on Cloudflare, Dalton's go |
-| 2 | Read-only USB test page (`/usb-test/`): connect, ask `$I` and `?` status, show position. Sends nothing that moves. | Test at school |
-| 3 | USB send: teacher-approved send, pause (`!`), resume (`~`), stop (soft reset), live position on the preview. | Phase 2 works on the real machine |
+| 2 | Read-only USB test page (`/usb-test/`): connect, ask `$I` and `?` status, show position. Sends nothing that moves. **Built** (tested against a pretend GRBL, not the real machine yet). | Test at school |
+| 3 | USB send, built the uploadmylaser way (section 8): teacher switch off by default, frame required, router switch as the physical gate, pause / stop, live position. | Phase 2 works on the real machine |
 | 4 | Nice to have: V-carve text, inlays, DXF, 3D preview of the finished part. | |
 
 ## 6. Questions for Dalton (school, Monday 2026-09-28)
@@ -113,3 +113,31 @@ Those come only from the teacher.
   the router must be switched off by hand.
 - The app is a helper. The teacher stays at the machine for every cut, with eye protection, and
   never leaves it running.
+
+## 8. Lessons from uploadmylaser (applied here)
+
+uploadmylaser reached the real classroom laser first. What it taught, and what uploadmycut does with it:
+
+1. **Frame before every job.** Dalton made Frame required before every laser Send. uploadmycut now
+   makes a frame check file next to every cut file (`name-frame.nc`): router off, the bit traces the
+   cut area at the safe height, so the teacher sees where it cuts and that it clears the clamps. Phase 3
+   USB send will refuse to start a job until its frame has run in the same session.
+2. **Never filter the USB picker.** The first real laser connect failed until the port filter was
+   loosened. `/usb-test/` asks for any port; record `port.getInfo()` at school before ever filtering.
+3. **A physical gate at the machine.** The laser's own touchscreen (Send to panel) makes someone stand at
+   the machine to start a job. The Shapeoko has no touchscreen, but the Makita has its own switch: a
+   job cannot cut until a person switches the router on. Phase 3 sends the job with a pause (`M0`)
+   after the first move to the start point, and the page says "switch the router on, then press
+   Continue" while the teacher is at the machine. Every stop also says "switch the router off".
+4. **Teacher switch, off by default.** uploadmylaser's Send to panel stays off until tested on the real
+   laser. uploadmycut's USB send ships the same way: a teacher setting, off, until the school test
+   passes (docs/FIRST_CUT.md).
+5. **Only public protocols, never another program's traffic.** uploadmylaser's LightBurn capture had to
+   be removed from the public repo (LightBurn's licence forbids reverse engineering). uploadmycut uses
+   only GRBL's public docs (github.com/gnea/grbl/wiki) and MIT code such as cncjs. Never capture,
+   decode or copy Carbide Motion or Carbide Create traffic, files or behaviour.
+6. **District IT.** For uploadmycode, district IT only had to unblock the site; Web Serial needed no
+   policy change. Ask IT to allow uploadmycut.com before the first class.
+7. **Test the real thing before calling it done.** Both siblings hit things only the real machine
+   showed (the USB filter, controller replies). Nothing in phase 3 counts as working until it has run
+   on the school Shapeoko with the teacher at the machine.

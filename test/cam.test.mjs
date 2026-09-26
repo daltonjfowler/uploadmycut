@@ -3,7 +3,7 @@ import test from 'node:test';
 import { pathToPolylines, parseTransform, apply, lengthToMm, shapeToPath } from '../shared/svg-path.js';
 import { area, union, offset } from '../shared/geometry.js';
 import { planCut, passDepths, estimateSeconds } from '../shared/cam.js';
-import { writeGcode } from '../shared/gcode.js';
+import { writeGcode, writeFrameGcode, cutArea } from '../shared/gcode.js';
 import { checkGcode } from '../shared/check-gcode.js';
 
 const square = (x, y, s) => [[x, y], [x + s, y], [x + s, y + s], [x, y + s]];
@@ -147,4 +147,18 @@ test('geometry: offset grows a square by the radius with round corners', () => {
   const g = offset(union([square(0, 0, 10)]), 1);
   // Arcs are short straight pieces within 10 µm of the true arc, so a hair under the exact area.
   assert.ok(Math.abs(area(g[0]) - (100 + 40 + Math.PI)) < 0.1);
+});
+
+test('frame check: traces the cut area at safe height, router off, passes the checker', () => {
+  const plan = planCut({ shapes: [{ points: square(50, 50, 50), closed: true, job: 'cutout' }], board, bit, cut });
+  const box = cutArea(plan.moves, bit.diameter / 2, board);
+  // Cut out path is r outside the line, the bit edge r more.
+  assert.ok(Math.abs(box.minX - (50 - 3.175)) < 0.01 && Math.abs(box.maxY - (100 + 3.175)) < 0.01, JSON.stringify(box));
+  const g = writeFrameGcode({ box, safeZ: cut.safeZ, feed: 900, notes: ['frame (check)'] });
+  assert.ok(!/\bM0?3\b/.test(g), 'router never on (M3; M30 is just program end)');
+  assert.ok(/\bM0?3\b/.test('M3 S17000') && !/\bM0?3\b/.test('M30'), 'the check itself works');
+  assert.ok(!/Z-/.test(g), 'never goes down');
+  assert.equal((g.match(/^G1 /gm) || []).length, 4);
+  assert.deepEqual(checkGcode(g, { ...limits, safeZ: 5 }).errors, []);
+  assert.equal(cutArea([], 1, board), null);
 });

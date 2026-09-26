@@ -54,6 +54,11 @@ All cutting maths runs in the student's browser. There is no container, so no co
 6. With a manual router, feed hold / reset / M5 do NOT stop the bit. Every STOP and every teacher
    step says to switch the router off too.
 7. Use this app's own KV namespace (`uploadmycut-CLASS_KV`). Never another site's.
+8. Frame before every job (uploadmylaser's lesson): every cut file comes with a frame check file
+   (router off, safe height, cut-area box). The phase 3 USB sender must refuse a job whose frame has
+   not run. Never filter the USB port picker by vendor id.
+9. Only public protocols: GRBL's own docs and MIT/BSD code (cncjs). Never capture, decode or copy
+   Carbide Motion / Carbide Create traffic, files or behaviour (the LightBurn lesson, PLAN.md section 8).
 
 ## Commands
 `npm test` (Node unit tests), `npm run build`, `npm run dev` (build + wrangler dev on
