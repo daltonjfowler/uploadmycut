@@ -150,7 +150,26 @@ export class BoardView {
     const h = Math.max(50, this.cssH - pad.t - pad.b);
     const s = Math.min(w / this.board.w, h / this.board.h);
     this.view = { s, ox: pad.l + (w - this.board.w * s) / 2, oy: pad.t + (h + this.board.h * s) / 2 };
+    this.fitScale = s;
+    // The part of the canvas not covered by the floating cards (on a phone, above the bottom sheet).
+    this.free = { x0: pad.l, x1: this.cssW - pad.r, y0: pad.t, y1: this.cssH - pad.b };
     this.draw();
+  }
+
+  /**
+   * The view may slide and zoom, but the board never leaves the free part of the screen: at least
+   * 80 px of it (or half of it, when it is small) stays visible across and down.
+   */
+  keepInView(v) {
+    const f = this.free ?? { x0: 0, x1: this.cssW, y0: 0, y1: this.cssH };
+    const bw = this.board.w * v.s;
+    const bh = this.board.h * v.s;
+    const kx = Math.min(80, bw / 2, (f.x1 - f.x0) / 2);
+    const ky = Math.min(80, bh / 2, (f.y1 - f.y0) / 2);
+    const ox = Math.min(Math.max(v.ox, f.x0 + kx - bw), f.x1 - kx);
+    // Screen y of the board's back edge is oy - bh, its front edge oy.
+    const oy = Math.min(Math.max(v.oy, f.y0 + ky), f.y1 - ky + bh);
+    return { ...v, ox, oy };
   }
 
   toScreen([x, y]) {
@@ -515,7 +534,7 @@ export class BoardView {
       if (Math.hypot(sp[0] - d.start[0], sp[1] - d.start[1]) < 3 && !d.panning) return;
       d.panning = true;
       this.userZoomed = true;
-      this.view = { ...d.view, ox: d.view.ox + sp[0] - d.start[0], oy: d.view.oy + sp[1] - d.start[1] };
+      this.view = this.keepInView({ ...d.view, ox: d.view.ox + sp[0] - d.start[0], oy: d.view.oy + sp[1] - d.start[1] });
       this.draw();
       return;
     }
@@ -554,8 +573,9 @@ export class BoardView {
     const sp = this.eventPoint(e);
     const w = this.toWorld(...sp);
     const k = Math.exp(-e.deltaY * 0.0015);
-    const s = Math.min(Math.max(this.view.s * k, 0.2), 60);
-    this.view = { s, ox: sp[0] - w[0] * s, oy: sp[1] + w[1] * s };
+    const fit = this.fitScale || this.view.s;
+    const s = Math.min(Math.max(this.view.s * k, fit * 0.5), fit * 25);
+    this.view = this.keepInView({ s, ox: sp[0] - w[0] * s, oy: sp[1] + w[1] * s });
     this.userZoomed = true;
     this.draw();
   }

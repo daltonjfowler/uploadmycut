@@ -82,3 +82,41 @@ test('placed tabs move and turn with the part', () => {
   assert.deepEqual(pt, expect);
   assert.ok(Math.abs(pt[0] - 100) < 1e-9 && Math.abs(pt[1] - 110) < 1e-9, JSON.stringify(pt));
 });
+
+import { gridSpots, keychainPart, doorSignPart, ornamentPart, partBounds, placeOnBoard, designShapes } from '../shared/design.js';
+
+const plan = (parts, b = { w: 200, h: 200, t: 6 }) => planCut({ shapes: designShapes(parts, 3), board: b, bit, cut: { ...cut, pocketMaxDepth: 3 } });
+
+test('copies: a grid from the front-left, inside the edges, skipping clamps, never overlapping', () => {
+  const p = makePart({ name: 'x', kind: 'shape', flipY: false, lines: [{ points: sq(0, 0, 30), closed: true }] });
+  const spots = gridSpots(p, 50, { w: 200, h: 150 }, 10, 8);
+  // 30 wide + 8 gap: 4 across (10..168), 3 down (10..124).
+  assert.equal(spots.length, 12);
+  assert.deepEqual(spots[0], { x: 25, y: 25 });
+  const clamps = clampRects({ w: 200, h: 150, clampLayout: 'corners', clampSize: 30 });
+  const clear = gridSpots(p, 50, { w: 200, h: 150 }, 10, 8, clamps, 5);
+  assert.ok(clear.length < 12 && clear.length > 0);
+  assert.ok(clear.every((s) => !clamps.some((c) => s.x - 15 < c.x + c.w + 5 && s.x + 15 > c.x - 5 && s.y - 15 < c.y + c.h + 5 && s.y + 15 > c.y - 5)));
+  assert.equal(gridSpots(p, 3, { w: 200, h: 150 }, 10, 8).length, 3);
+});
+
+test('starters: keychain, door sign and ornament plan cleanly', () => {
+  // A stand-in for text (SVG orientation): two letters, the second with a centre.
+  const lines = [
+    { points: [[0, 0], [8, 0], [8, 20], [0, 20]], closed: true },
+    { points: [[12, 0], [24, 0], [24, 20], [12, 20]], closed: true },
+    { points: [[15, 5], [15, 15], [21, 15], [21, 5]], closed: true },
+  ];
+  const k = keychainPart('AB', lines);
+  assert.deepEqual([...new Set(k.jobs)].sort(), ['cutout', 'hole', 'pocket']);
+  placeOnBoard(k, { w: 200, h: 200 }, 12);
+  assert.deepEqual(plan([k]).warnings.filter((w) => w.code !== 'detail').map((w) => w.code), []);
+  const d = doorSignPart('AB', lines);
+  assert.equal(d.jobs.filter((j) => j === 'hole').length, 2);
+  placeOnBoard(d, { w: 200, h: 200 }, 12);
+  assert.deepEqual(plan([d]).warnings.filter((w) => w.code !== 'detail').map((w) => w.code), []);
+  const o = ornamentPart();
+  placeOnBoard(o, { w: 200, h: 200 }, 12);
+  assert.deepEqual(plan([o]).warnings.map((w) => w.code), []);
+  assert.ok(partBounds(o).w > 60);
+});

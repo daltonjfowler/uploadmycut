@@ -305,3 +305,100 @@ export function revivePart(raw, budget = { points: MAX_SAVED_POINTS }) {
 export function cloneForCopy(part) {
   return { ...part, id: `p${nextId++}`, jobs: part.jobs.slice(), tabs: part.tabs ? part.tabs.map((p) => p.slice()) : null };
 }
+
+// ---- Class sets and starter projects ----
+
+/**
+ * Board spots for `n` copies of a part in a grid: rows from the front-left corner, `gap` mm
+ * apart, inside `keep` mm of the edges, skipping any spot that would touch a clamp. Returns
+ * [{ x, y }] part positions (at most n; fewer when the board is full).
+ */
+export function gridSpots(part, n, board, keep, gap, clamps = [], clampPad = 0) {
+  const b = partBounds(part);
+  const dx = part.x - b.minX;
+  const dy = part.y - b.minY;
+  const spots = [];
+  for (let y = keep; y + b.h <= board.h - keep + 1e-6 && spots.length < n; y += b.h + gap) {
+    for (let x = keep; x + b.w <= board.w - keep + 1e-6 && spots.length < n; x += b.w + gap) {
+      const hit = clamps.some((c) => x < c.x + c.w + clampPad && x + b.w > c.x - clampPad && y < c.y + c.h + clampPad && y + b.h > c.y - clampPad);
+      if (!hit) spots.push({ x: x + dx, y: y + dy });
+    }
+  }
+  return spots;
+}
+
+function circleLine(cx, cy, r, n = 48) {
+  return Array.from({ length: n }, (_, i) => [cx + r * Math.cos((i / n) * 2 * Math.PI), cy + r * Math.sin((i / n) * 2 * Math.PI)]);
+}
+
+function roundedRectLine(x, y, w, h, r) {
+  const pts = [];
+  const corner = (cx, cy, a0) => {
+    for (let i = 0; i <= 10; i++) {
+      const a = a0 + (Math.PI / 2) * (i / 10);
+      pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+    }
+  };
+  corner(x + w - r, y + r, -Math.PI / 2);
+  corner(x + w - r, y + h - r, 0);
+  corner(x + r, y + h - r, Math.PI / 2);
+  corner(x + r, y + r, Math.PI);
+  return pts;
+}
+
+/**
+ * A name keychain from text lines (SVG orientation, y down): the letters are a pocket, a border
+ * 4 mm round them and a round lobe at the left end is cut out, and the lobe has the keyring hole.
+ */
+export function keychainPart(name, textLines) {
+  const letters = textLines.filter((l) => l.closed).map((l) => l.points);
+  const b = bounds(letters);
+  const lobe = [b.minX - 8, (b.minY + b.maxY) / 2];
+  const outline = offset(union([...letters, circleLine(lobe[0], lobe[1], 7.5)], 'nonzero'), 4).filter((p) => area(p) > 0);
+  return makePart({
+    name,
+    kind: 'text',
+    fill: 'nonzero',
+    lines: [
+      ...textLines.map((l) => ({ ...l, job: 'pocket' })),
+      ...outline.map((points) => ({ points, closed: true, job: 'cutout' })),
+      { points: circleLine(lobe[0], lobe[1], 2.8), closed: true, job: 'hole' },
+    ],
+  });
+}
+
+/** A door sign: a rounded board, the name pocketed in the middle, a screw hole at each end. */
+export function doorSignPart(name, textLines) {
+  const letters = textLines.filter((l) => l.closed).map((l) => l.points);
+  const b = bounds(letters);
+  const w = b.w + 44;
+  const h = b.h + 28;
+  const x = b.minX - 22;
+  const y = b.minY - 14;
+  return makePart({
+    name,
+    kind: 'text',
+    fill: 'nonzero',
+    lines: [
+      { points: roundedRectLine(x, y, w, h, 8), closed: true, job: 'cutout' },
+      ...textLines.map((l) => ({ ...l, job: 'pocket' })),
+      { points: circleLine(x + 10, y + h / 2, 2.2), closed: true, job: 'hole' },
+      { points: circleLine(x + w - 10, y + h / 2, 2.2), closed: true, job: 'hole' },
+    ],
+  });
+}
+
+/** A five-point star ornament with a hanging hole near the top point. */
+export function ornamentPart() {
+  const star = Array.from({ length: 10 }, (_, i) => {
+    const r = i % 2 ? 16 : 34;
+    const a = Math.PI / 2 + (Math.PI * i) / 5;
+    return [r * Math.cos(a), r * Math.sin(a)];
+  });
+  return makePart({
+    name: 'Star ornament',
+    kind: 'shape',
+    flipY: false,
+    lines: [{ points: star, closed: true, job: 'cutout' }, { points: circleLine(0, 18, 2.5), closed: true, job: 'hole' }],
+  });
+}

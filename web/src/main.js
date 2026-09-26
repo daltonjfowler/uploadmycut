@@ -11,7 +11,7 @@ import { textLines } from './text.js';
 import { loadDesign, saveDesign } from './design-store.js';
 import { SHAPES } from '../../shared/shapes.js';
 import {
-  cloneForCopy, designShapes, designTabPoints, fitOnBoard, makePart, partBounds, partSize, placeOnBoard, revivePart, snapshot, toBoard, toLocal, withBorder,
+  cloneForCopy, designShapes, designTabPoints, doorSignPart, fitOnBoard, gridSpots, keychainPart, makePart, ornamentPart, partBounds, partSize, placeOnBoard, revivePart, snapshot, toBoard, toLocal, withBorder,
 } from '../../shared/design.js';
 import { estimateSeconds, JOB_LABELS, planCut } from '../../shared/cam.js';
 import { cutArea, writeFrameGcode, writeGcode } from '../../shared/gcode.js';
@@ -170,6 +170,28 @@ function moveTab(i, at) {
   const pts = same.map((x) => (x === t ? at : [x.x, x.y]));
   part.tabs = [...others, ...pts.map((pt) => toLocal(part, pt))];
   changed();
+}
+
+// A class set: the picked part and copies of it in rows from the front-left corner, clear of the
+// board edge and the clamps. The gap leaves room for the bit between parts.
+function makeCopies(n) {
+  const part = selectedPart();
+  if (!part) return 0;
+  const gap = bit().diameter * 2 + 2;
+  const spots = gridSpots(part, n, board(), keepOut(), gap, clampRects(material()), bit().diameter + 2);
+  if (!spots.length) return 0;
+  record();
+  const others = state.parts.filter((p) => p !== part);
+  const set = spots.map((spot, i) => {
+    const p = i === 0 ? part : cloneForCopy(part);
+    p.x = spot.x;
+    p.y = spot.y;
+    return p;
+  });
+  state.parts = [...others, ...set];
+  state.selected = { partId: part.id, lines: new Set(part.lines.map((_, i) => i)) };
+  changed();
+  return spots.length;
 }
 
 function deleteSelected() {
@@ -475,6 +497,7 @@ function renderPanel() {
         </div>
         <div class="tool-row">
           <button id="border" type="button" title="Add an outline 4 mm around it, to cut out (name keychains)">▢ Border</button>
+          <button id="copies" type="button" title="Make a class set: copies in rows across the board">▦ Copies</button>
           <button id="mirror" type="button" title="Flip left to right">⇋ Flip</button>
           <button id="rot90" type="button" title="Turn a quarter">⟳ 90°</button>
           <button id="copy" type="button" title="Copy (Ctrl+D)">⧉ Copy</button>
@@ -531,6 +554,11 @@ function bindPanel(part) {
     transformSelected({ x: part.x + b.w / 2 - (pb.minX + pb.maxX) / 2, y: part.y + b.h / 2 - (pb.minY + pb.maxY) / 2 });
   });
   on('border', 'click', addBorder);
+  on('copies', 'click', () => {
+    $('#copiesError').hidden = true;
+    $('#copiesDialog').showModal();
+    $('#copiesCount').focus();
+  });
   on('mirror', 'click', () => transformSelected({ mirror: !part.mirror }));
   on('rot90', 'click', () => transformSelected({ rotation: (part.rotation + 90) % 360 }));
   on('copy', 'click', copySelected);
@@ -714,11 +742,24 @@ $('#fileInput').addEventListener('change', (e) => {
   openFiles([...e.target.files]);
   e.target.value = '';
 });
-$('#textBtn').addEventListener('click', () => {
+let textMode = 'text'; // 'text' | 'keychain' | 'sign': what the text dialog makes
+const TEXT_MODES = {
+  text: { title: 'Add text', button: 'Add text', font: null, height: null },
+  keychain: { title: 'Name keychain', button: 'Make keychain', font: 'script', height: 22 },
+  sign: { title: 'Door sign', button: 'Make sign', font: 'block', height: 26 },
+};
+function openTextDialog(mode) {
+  textMode = mode;
+  const m = TEXT_MODES[mode];
+  $('#textTitle').textContent = m.title;
+  $('#textOk').textContent = m.button;
+  if (m.font) $(`input[name="font"][value="${m.font}"]`).checked = true;
+  if (m.height) $('#textHeight').value = m.height;
   $('#textError').hidden = true;
   $('#textDialog').showModal();
   $('#textInput').focus();
-});
+}
+$('#textBtn').addEventListener('click', () => openTextDialog('text'));
 $('#textForm').addEventListener('submit', async (e) => {
   if (e.submitter?.value !== 'ok') return;
   e.preventDefault();
@@ -728,7 +769,14 @@ $('#textForm').addEventListener('submit', async (e) => {
   const height = Math.min(150, Math.max(8, Number($('#textHeight').value) || 25));
   busy('Making letters…');
   try {
-    await addText(text, font, height);
+    if (textMode === 'text') await addText(text, font, height);
+    else {
+      const lines = await textLines(font, text, height);
+      addPart(fixJobs(textMode === 'keychain' ? keychainPart(text, lines) : doorSignPart(text, lines)));
+      toast(textMode === 'keychain'
+        ? 'Keychain made: the name is a pocket, the outline is cut out, and it has a keyring hole.'
+        : 'Door sign made: the name is a pocket, with a screw hole at each end.');
+    }
     $('#textDialog').close();
   } catch (err) {
     $('#textError').textContent = err.message;
@@ -737,7 +785,21 @@ $('#textForm').addEventListener('submit', async (e) => {
     busy(null);
   }
 });
+$('#copiesForm').addEventListener('submit', (e) => {
+  if (e.submitter?.value !== 'ok') return;
+  e.preventDefault();
+  const n = Math.min(60, Math.max(2, Math.round(Number($('#copiesCount').value) || 2)));
+  const made = makeCopies(n);
+  if (!made) {
+    $('#copiesError').textContent = 'It is too big for even one spot clear of the edges and clamps. Make it smaller.';
+    $('#copiesError').hidden = false;
+    return;
+  }
+  $('#copiesDialog').close();
+  toast(made < n ? `Only ${made} fit on this board (you asked for ${n}). Make it smaller to fit more.` : `${made} on the board, in rows.`, made < n ? 'warn' : '');
+});
 $('#undoBtn').addEventListener('click', undo);
+$('#fitBtn').addEventListener('click', () => view.fit(true));
 $('#clearBtn').addEventListener('click', () => {
   if (!state.parts.length) return;
   record();
@@ -752,7 +814,11 @@ $('#help').addEventListener('click', () => $('#helpDialog').showModal());
 for (const b of document.querySelectorAll('.stage')) b.addEventListener('click', () => setStage(b.dataset.stage));
 
 const shapesMenu = $('#shapesMenu');
-shapesMenu.innerHTML = Object.entries(SHAPES).map(([k, s]) => `<button type="button" role="menuitem" data-shape="${k}">${esc(s.label)}</button>`).join('');
+const PROJECTS = { keychain: 'Name keychain', sign: 'Door sign', ornament: 'Star ornament' };
+shapesMenu.innerHTML = '<div class="menu-head">Shapes</div>'
+  + Object.entries(SHAPES).map(([k, s]) => `<button type="button" role="menuitem" data-shape="${k}">${esc(s.label)}</button>`).join('')
+  + '<div class="menu-head">Projects to start from</div>'
+  + Object.entries(PROJECTS).map(([k, label]) => `<button type="button" role="menuitem" data-project="${k}">${esc(label)}</button>`).join('');
 const toggleShapes = (open) => {
   shapesMenu.hidden = !open;
   $('#shapesBtn').setAttribute('aria-expanded', String(open));
@@ -762,10 +828,12 @@ $('#shapesBtn').addEventListener('click', (e) => {
   toggleShapes(shapesMenu.hidden);
 });
 shapesMenu.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-shape]');
+  const b = e.target.closest('[data-shape], [data-project]');
   if (!b) return;
   toggleShapes(false);
-  addShape(b.dataset.shape);
+  if (b.dataset.shape) addShape(b.dataset.shape);
+  else if (b.dataset.project === 'ornament') addPart(fixJobs(ornamentPart()));
+  else openTextDialog(b.dataset.project);
 });
 document.addEventListener('click', () => toggleShapes(false));
 

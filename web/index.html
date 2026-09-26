@@ -52,6 +52,7 @@
       <span class="history card">
         <button id="undoBtn" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>↶</button>
         <button id="redoBtn" type="button" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>↷</button>
+        <button id="fitBtn" type="button" title="Show the whole board again" aria-label="Fit the board on screen">⤢</button>
         <button id="clearBtn" type="button" title="Take everything off the board (Undo brings it back)" aria-label="Clear board" disabled>🗑</button>
       </span>
     </div>
@@ -115,7 +116,7 @@
 
   <dialog id="textDialog" class="dialog">
     <form method="dialog" id="textForm">
-      <h2>Add text</h2>
+      <h2 id="textTitle">Add text</h2>
       <label class="name-field">Text
         <input id="textInput" type="text" maxlength="30" autocomplete="off" spellcheck="false" placeholder="Your name" required></label>
       <fieldset class="font-pick">
@@ -129,7 +130,21 @@
       <p id="textError" class="msg bad" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" type="submit" formnovalidate>Cancel</button>
-        <button value="ok" class="primary" type="submit">Add text</button>
+        <button id="textOk" value="ok" class="primary" type="submit">Add text</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="copiesDialog" class="dialog">
+    <form method="dialog" id="copiesForm">
+      <h2>Copies</h2>
+      <p class="note">Makes a class set of the picked drawing in rows across the board, with room for the bit between them and clear of the clamps.</p>
+      <label class="name-field">How many in all
+        <input id="copiesCount" type="number" min="2" max="60" step="1" value="6"></label>
+      <p id="copiesError" class="msg bad" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" type="submit" formnovalidate>Cancel</button>
+        <button value="ok" class="primary" type="submit">Make copies</button>
       </div>
     </form>
   </dialog>

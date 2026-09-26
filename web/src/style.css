@@ -92,6 +92,7 @@ button.danger:hover:not(:disabled) { background: var(--bad-soft); border-color: 
 .menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 8; min-width: 190px; padding: 5px; display: grid; gap: 2px; }
 .menu button { border: 0; background: none; text-align: left; padding: 8px 10px; display: flex; gap: 10px; align-items: center; }
 .menu button svg { flex: none; }
+.menu-head { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--wood-ink); padding: 8px 10px 2px; }
 
 /* Right panel */
 .panel {
