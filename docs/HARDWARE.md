@@ -151,7 +151,8 @@ The only official Carbide chart is "Shapeoko 3 Feeds & Speeds, .25 in" for #201/
 No official numbers found for #102 (1/8"), #122 (1/16"), #301 (V-bit), maple or oak.
 
 **Our class starting values (DERIVED, not school tested)** are in `shared/settings.js`
-STARTING_FEEDS:
+STARTING_FEEDS. They are this project's own numbers: Carbide 3D did not make, test or endorse them
+or this tool.
 
 - #102 in pine / MDF: dial 3 (~17,000-18,000 rpm) × 2 flutes × 0.025 mm chip load ≈ 900 mm/min,
   plunge 300, 1.0 mm per pass. Hardwood 450 mm/min, 0.5 mm per pass. Chip loads from

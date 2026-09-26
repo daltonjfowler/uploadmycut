@@ -49,9 +49,10 @@ Students get a new setup when they reload the page.
 6. Start. When Carbide Motion asks, switch the router on.
 7. After the cut, router off, vacuum, then free the parts from their tabs.
 
-Every file was checked in the browser before download: it stays on the board, is no deeper than
+Every file passed a check in the browser before download: it stays on the board, is no deeper than
 the board plus the cut-below depth, uses the class speeds, and has no machine settings, tool
-changes or homing commands in it.
+changes or homing commands in it. That check reduces mistakes; it does not make a cut safe. You
+check the file and stay at the machine.
 
 ## The USB test page (`/usb-test/`)
 

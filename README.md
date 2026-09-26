@@ -1,6 +1,6 @@
 # uploadmycut
 
-Kid-safe cut files for the classroom Shapeoko CNC, built for Chromebook classrooms. Students open
+Classroom cut files for the Shapeoko CNC, with teacher-set limits, built for Chromebook classrooms. Students open
 a drawing (SVG), pick a shape, or type text; place it on the board; give each line a job (cut out,
 cut hole, engrave, pocket); fix the red spots where the bit is too thick; preview the carved board;
 and download a `.nc` file for the teacher to run in Carbide Motion. The bit, materials, speeds,
@@ -39,6 +39,13 @@ Polygon offsets by [Clipper](https://github.com/junmer/clipper-lib) (Angus Johns
 Fonts read with [opentype.js](https://github.com/opentypejs/opentype.js) (MIT). Fonts: Lilita One
 (Juan Montoreano) and Pacifico (The Pacifico Project Authors), both SIL Open Font License 1.1,
 licence files in `web/public/fonts/`.
+
+## Trademarks and safety
+
+Independent school project. Not affiliated with, made by, tested by or endorsed by Carbide 3D or
+Makita. Shapeoko, Carbide Motion, Carbide Create and Makita are trademarks of their owners. The
+site limits what students can change; it is not a safety system. See
+[Privacy and legal](https://uploadmycut.com/legal.html).
 
 ## License
 

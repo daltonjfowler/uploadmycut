@@ -538,7 +538,7 @@ function renderPreview() {
     </div>
     <div class="section">
       ${r.check.ok
-        ? '<div class="msg ok"><b>✓</b><span>File checked: stays on the board, not too deep, class speeds.</span></div>'
+        ? '<div class="msg ok"><b>✓</b><span>Passed the class limits check: on the board, not too deep, class speeds. That does not make a cut safe: your teacher checks it and stays at the machine.</span></div>'
         : `<div class="msg bad"><b>✕</b><span>The file did not pass the safety check. Tell your teacher:<br>${r.check.errors.map((e) => esc(`line ${e.line}: ${e.message}`)).join('<br>')}</span></div>`}
       <label class="name-field">File name
         <input id="fileName" type="text" maxlength="40" value="${esc(state.fileName)}" placeholder="my-cut" spellcheck="false"></label>

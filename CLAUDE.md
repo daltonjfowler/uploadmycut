@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Kid-safe CAM for the classroom Shapeoko (probably a Shapeoko 3 standard with a Makita router, see
+Classroom CAM with teacher-set limits for the Shapeoko (probably a Shapeoko 3 standard with a Makita router, see
 docs/HARDWARE.md). Read PLAN.md first. Fourth family site after uploadmycode, uploadmylaser and
 uploadmymodel; the Worker, headers, theme button and icon recipe follow uploadmymodel.
 

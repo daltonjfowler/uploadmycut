@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Kid-safe CAM for the classroom Shapeoko: drawing in, .nc file out, built for Chromebook classrooms.",
+  "description": "Classroom CAM for the Shapeoko with teacher-set limits: drawing in, .nc file out, built for Chromebook classrooms.",
   "license": "MIT",
   "scripts": {
     "dev": "npm run build && wrangler dev --ip 127.0.0.1 --port 8791 --local-upstream localhost",

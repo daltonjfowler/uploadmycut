@@ -4,7 +4,7 @@
 red-spot checks, carved preview, download, teacher page). Not deployed: the domain is not bought.
 Feeds are starting values, not tested on the school machine.
 
-A kid-safe web app for the donated classroom Shapeoko. Fourth site in the family, after
+A classroom web app, with teacher-set limits, for the donated Shapeoko. Fourth site in the family, after
 uploadmycode, uploadmylaser and uploadmymodel. Students open a drawing, say which lines get cut
 out, engraved or pocketed, see the toolpath, and get a `.nc` file. The teacher locks the bit,
 material, speeds and depths. Later the page can send the file to the machine over USB, like
