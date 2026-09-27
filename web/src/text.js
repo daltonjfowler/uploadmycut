@@ -17,14 +17,14 @@ const loaded = new Map();
 async function font(key) {
   if (!loaded.has(key)) {
     loaded.set(key, (async () => {
-      const [{ parse }, buf] = await Promise.all([
+      const [ot, buf] = await Promise.all([
         import('opentype.js'),
         fetch(FONTS[key].file).then((r) => {
           if (!r.ok) throw new Error('The font did not load. Check the internet and try again.');
           return r.arrayBuffer();
         }),
       ]);
-      return parse(buf);
+      return (ot.parse ?? ot.default.parse)(buf); // Node (the unit tests) sees the CommonJS build
     })());
     loaded.get(key).catch(() => loaded.delete(key));
   }

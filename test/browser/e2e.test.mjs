@@ -82,7 +82,7 @@ check('file name cleaned', dl.suggestedFilename() === 'Keychain-Sign.nc', dl.sug
 const file = `${OUT}${dl.suggestedFilename()}`;
 await dl.saveAs(file);
 const gcode = readFileSync(file, 'utf8');
-const r = checkGcode(gcode, { board: { w: 140, h: 200, t: 19 }, maxThroughMm: 0.35, maxFeed: 900 });
+const r = checkGcode(gcode, { board: { w: 140, h: 200, t: 19 }, maxThroughMm: 0.35, maxFeed: 900, safeZ: 5 });
 check('downloaded file passes the checker', r.ok, JSON.stringify(r.errors));
 check('file header', /^\(uploadmycut Keychain-Sign\.nc\)\n/.test(gcode) && gcode.includes('M3 S17000'), gcode.slice(0, 300));
 check('cuts through 19 mm + 0.3', r.stats.minZ === -19.3, String(r.stats.minZ));

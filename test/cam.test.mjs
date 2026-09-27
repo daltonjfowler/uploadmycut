@@ -14,7 +14,7 @@ const cut = {
   tabs: { width: 6, height: 3 },
 };
 const feeds = { feed: 1000, plunge: 250, rpm: 18000 };
-const limits = { board, maxThroughMm: 0.5, maxFeed: 2500 };
+const limits = { board, maxThroughMm: 0.5, maxFeed: 2500, safeZ: 5 };
 
 test('path data: lines, relative moves, implicit lineto, close', () => {
   const [pl] = pathToPolylines('M10 10 h20 v20 l-20 0 z');
@@ -131,16 +131,17 @@ test('checker refuses dangerous files', () => {
     'G92': 'G92 X0 Y0\n',
     'relative': 'G91\nG1 X10 F100\n',
     'tool change': 'T1 M6\n',
-    'rapid into wood': 'G0 Z5\nG0 X10 Y10\nG0 Z-1\n',
-    'rapid sideways in wood': 'G0 Z5\nG0 X10 Y10\nG1 Z-1 F200\nG0 X20\n',
-    'too deep': 'G0 Z5\nG0 X10 Y10\nG1 Z-13 F200\n',
-    'too fast': 'G0 Z5\nG0 X10 Y10\nG1 Z-1 F5000\n',
-    'off board': 'G0 Z5\nG0 X10 Y10\nG1 Z-1 F200\nG1 X250 F1000\n',
-    'inch file too deep': 'G20\nG0 Z0.2\nG0 X1 Y1\nG1 Z-0.6 F10\n',
-    'no position': 'G0 Z5\nG1 Z-1 F100\n',
+    'rapid into wood': 'G21 G90\nG0 Z5\nG0 X10 Y10\nG0 Z-1\n',
+    'rapid sideways in wood': 'G21 G90\nG0 Z5\nG0 X10 Y10\nG1 Z-1 F200\nG0 X20\n',
+    'too deep': 'G21 G90\nG0 Z5\nG0 X10 Y10\nG1 Z-13 F200\n',
+    'too fast': 'G21 G90\nG0 Z5\nG0 X10 Y10\nG1 Z-1 F5000\n',
+    'off board': 'G21 G90\nG0 Z5\nG0 X10 Y10\nG1 Z-1 F200\nG1 X250 F1000\n',
+    'inch file too deep': 'G21 G90 G20\nG0 Z0.19\nG0 X1 Y1\nG1 Z-0.6 F10\n',
+    'no position': 'G21 G90\nG0 Z5\nG1 Z-1 F100\n',
     'garbage': 'hello\n',
   };
   for (const [name, text] of Object.entries(bad)) assert.equal(checkGcode(text, limits).ok, false, name);
+  assert.equal(checkGcode(ok, { ...limits, safeZ: undefined }).ok, false, 'no safe height in the limits');
 });
 
 test('geometry: offset grows a square by the radius with round corners', () => {
@@ -159,6 +160,6 @@ test('frame check: traces the cut area at safe height, router off, passes the ch
   assert.ok(/\bM0?3\b/.test('M3 S17000') && !/\bM0?3\b/.test('M30'), 'the check itself works');
   assert.ok(!/Z-/.test(g), 'never goes down');
   assert.equal((g.match(/^G1 /gm) || []).length, 4);
-  assert.deepEqual(checkGcode(g, { ...limits, safeZ: 5 }).errors, []);
+  assert.deepEqual(checkGcode(g, limits).errors, []);
   assert.equal(cutArea([], 1, board), null);
 });

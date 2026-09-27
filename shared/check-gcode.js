@@ -4,17 +4,20 @@
 // fix the file.
 //
 // Refused: GRBL settings or system commands ($...), tool changes, homing/probing/offset commands,
-// relative moves, anything we do not know; rapid moves inside the wood; any sideways move below the
-// safe height that is not over the board (clamps stand around it); cuts off the board, deeper than
-// the board plus the teacher's through-margin, or faster than the teacher's limits; and the
-// characters ! ~ ? anywhere, even in comments: GRBL acts on them the moment they arrive (pause,
-// resume, status), before it ever reads the line.
+// relative moves, anything we do not know; any move or feed before G21 (mm) and G90 (absolute), as
+// the machine may still be in inches from another file; rapid moves inside the wood; any move off the
+// board (below the safe height clamps stand there; above it, the machine frame), or above the safe
+// height; cuts deeper than the board plus the teacher's through-margin, or faster than the teacher's
+// limits; and the characters ! ~ ? anywhere, even in comments: GRBL acts on them the moment they
+// arrive (pause, resume, status), before it ever reads the line. A bare carriage return ends a line
+// for GRBL, so it ends one here too.
 
 const ALLOWED_G = new Set(['0', '1', '2', '3', '4', '17', '20', '21', '40', '49', '54', '80', '90', '94']);
 const ALLOWED_M = new Set(['0', '1', '2', '3', '5', '30']);
 const ALLOWED_LETTERS = new Set(['G', 'M', 'X', 'Y', 'Z', 'F', 'S', 'I', 'J', 'P', 'N']);
 const MAX_LINE = 70; // GRBL's line buffer is 80 characters
 const EDGE_TOL_MM = 0.05; // our own files keep the bit centre inside the margin; this is rounding room
+const TOP_TOL_MM = 0.001; // our own files never go above the safe height; this is 3-decimal rounding
 
 function strip(line) {
   return line.replace(/\([^)]*\)/g, '').replace(/;.*$/, '').trim();
@@ -25,6 +28,8 @@ function strip(line) {
  * @param {object} limits
  * @param {{w: number, h: number, t: number}} limits.board mm
  * @param {number} limits.maxThroughMm how far below the board bottom a cut may go
+ * @param {number} [limits.maxDepthMm] when set, the deepest a cut may go below the top instead
+ * @param {number} limits.safeZ mm above the board: the travel height, and the highest any move goes
  * @param {number} limits.maxFeed mm/min
  * @param {number} [limits.maxRpm]
  * @param {number} [limits.maxLines]
@@ -35,15 +40,19 @@ export function checkGcode(text, limits) {
   const fail = (line, message) => {
     if (errors.length < 20) errors.push({ line, message });
   };
-  const lines = String(text).split(/\r?\n/);
+  const lines = String(text).split(/\r\n|\r|\n/);
   if (limits.maxLines && lines.length > limits.maxLines) {
     return { ok: false, errors: [{ line: 0, message: `The file has ${lines.length} lines; the most is ${limits.maxLines}.` }], stats: {} };
   }
   const { board } = limits;
-  const minZ = -(board.t + limits.maxThroughMm);
+  if (!Number.isFinite(limits.safeZ)) return { ok: false, errors: [{ line: 0, message: 'The class setup has no safe height.' }], stats: {} };
+  const byBit = Number.isFinite(limits.maxDepthMm);
+  const minZ = -(byBit ? limits.maxDepthMm : board.t + limits.maxThroughMm);
   let unit = 1; // mm per file unit
   let motion = null;
   let absolute = true;
+  let mm = false; // G21 seen
+  let abs = false; // G90 seen
   const pos = { x: null, y: null, z: null };
   let feed = 0;
   let maxFeed = 0;
@@ -52,14 +61,14 @@ export function checkGcode(text, limits) {
   let cutMoves = 0;
   const box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
-  const travelZ = limits.safeZ ?? 0;
+  const travelZ = limits.safeZ;
   const clamps = limits.clamps ?? [];
   const onBoard = (x, y) => x !== null && y !== null && x >= -EDGE_TOL_MM && y >= -EDGE_TOL_MM
     && x <= board.w + EDGE_TOL_MM && y <= board.h + EDGE_TOL_MM;
 
   lines.forEach((raw, idx) => {
     const n = idx + 1;
-    if (/[^\x20-\x7e\t\r]/.test(raw)) return fail(n, 'The line has characters that are not plain text.');
+    if (/[^\x20-\x7e]/.test(raw)) return fail(n, 'The line has characters that are not plain text.');
     if (/[!~?]/.test(raw)) return fail(n, 'The characters ! ~ ? pause or restart the machine, even inside a comment.');
     if (raw.trimStart().startsWith('$')) return fail(n, 'GRBL settings and system commands ($) are not allowed.');
     const line = strip(raw).toUpperCase();
@@ -79,8 +88,13 @@ export function checkGcode(text, limits) {
         const g = String(Number(v));
         if (!ALLOWED_G.has(g)) return fail(n, `G${g} is not allowed.`);
         if (g === '20') unit = 25.4;
-        else if (g === '21') unit = 1;
-        else if (g === '90') absolute = true;
+        else if (g === '21') {
+          unit = 1;
+          mm = true;
+        } else if (g === '90') {
+          absolute = true;
+          abs = true;
+        }
         else if (['0', '1', '2', '3'].includes(g)) {
           motion = g;
 
@@ -96,6 +110,9 @@ export function checkGcode(text, limits) {
       word[l] = Number(v);
     }
     if (!absolute) return fail(n, 'Relative moves are not allowed.');
+    if ((!mm || !abs) && ['X', 'Y', 'Z', 'F', 'I', 'J'].some((l) => l in word)) {
+      return fail(n, 'A move or feed comes before G21 (millimetres) and G90 (absolute): the machine could still be in inches.');
+    }
     if ('F' in word) {
       feed = word.F * unit;
       maxFeed = Math.max(maxFeed, feed);
@@ -124,8 +141,13 @@ export function checkGcode(text, limits) {
       const rad = Math.hypot(pos.x - cx, pos.y - cy);
       reach.push([cx - rad, cy - rad], [cx + rad, cy + rad]); // conservative: the whole circle
     }
+    if (to.z > travelZ + TOP_TOL_MM) fail(n, `A move goes up to Z ${to.z.toFixed(2)} mm, above the class safe height (${travelZ} mm).`);
     if (sideways && Math.min(to.z, pos.z) < travelZ - 1e-6 && !reach.every(([x, y]) => onBoard(x, y))) {
       fail(n, `A move below the safe height (${travelZ} mm) goes outside the board, where clamps are.`);
+    } else if (sideways && !reach.every(([x, y]) => x === null || onBoard(x, y))) {
+      // High up is no place to leave the board either: past it are the machine's frame and limits.
+      const [x, y] = reach.find(([x0, y0]) => x0 !== null && !onBoard(x0, y0));
+      fail(n, `A move goes off the board (X ${x.toFixed(1)}, Y ${y.toFixed(1)} mm), even above the safe height.`);
     }
     // The teacher's clamp areas: nothing below the safe height may pass over one.
     if (clamps.length && Math.min(to.z, pos.z ?? to.z) < travelZ - 1e-6) {
@@ -161,7 +183,11 @@ export function checkGcode(text, limits) {
           }
         }
       }
-      if (to.z < minZ - 1e-6) fail(n, `A cut goes ${(-to.z).toFixed(2)} mm deep: deeper than the board plus ${limits.maxThroughMm} mm.`);
+      if (to.z < minZ - 1e-6) {
+        fail(n, byBit
+          ? `A cut goes ${(-to.z).toFixed(2)} mm deep: deeper than this bit may go (${limits.maxDepthMm} mm).`
+          : `A cut goes ${(-to.z).toFixed(2)} mm deep: deeper than the board plus ${limits.maxThroughMm} mm.`);
+      }
     }
     lowZ = Math.min(lowZ, to.z);
 

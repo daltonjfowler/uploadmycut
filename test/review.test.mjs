@@ -16,6 +16,7 @@ const cut = {
   marginMm: 5, climb: false, tabs: { width: 6, height: 2.5 },
 };
 const limits = { board, maxThroughMm: 0.35, maxFeed: 2500, safeZ: 5 };
+const H = 'G90 G94\nG17\nG21\n'; // the header every file of ours starts with
 const deep = (plan) => plan.moves.filter((v) => v.z < 0);
 // Every cutting segment (both ends below the top) as [from, to].
 function cutSegments(moves) {
@@ -105,9 +106,9 @@ test('7 & 8. checker: no ramping in from off the board, no low travel off the bo
     'override byte': '(\u0091)\nG0 Z5\n',
     'arc bulging off the board at low height': 'G0 Z5\nG0 X2 Y50\nG1 Z-1 F300\nG2 X2 Y60 I0 J5\n',
   };
-  for (const [name, text] of Object.entries(bad)) assert.equal(checkGcode(text, limits).ok, false, name);
+  for (const [name, text] of Object.entries(bad)) assert.equal(checkGcode(H + text, limits).ok, false, name);
   // Our own style still passes: lift, travel high, drop, cut on the board.
-  assert.deepEqual(checkGcode('G0 Z5\nG0 X10 Y10\nG0 Z1\nG1 Z-1 F200\nG1 X20 F900\nG0 Z5\nG0 X0 Y0\n', limits).errors, []);
+  assert.deepEqual(checkGcode(`${H}G0 Z5\nG0 X10 Y10\nG0 Z1\nG1 Z-1 F200\nG1 X20 F900\nG0 Z5\nG0 X0 Y0\n`, limits).errors, []);
 });
 
 test('writer drops GRBL realtime characters from comments', () => {
@@ -155,4 +156,116 @@ test('fuzz: random designs always make files that pass the checker, on every mat
   }
   void pointInRegion;
   void area;
+});
+
+// ---- 2026-09-27 security pass ----
+
+test('10. a bare carriage return ends a line, as it does for GRBL', () => {
+  // Each hid a real command inside a "comment" that only this checker saw as one line.
+  const bad = {
+    'deep fast plunge': '(n\rG1 Z-60 F9000\r)',
+    unlock: '(a\r$X\r)',
+    homing: '(b\r$H\r)',
+    jog: '(c\r$J=G91 X-500 F5000\r)',
+    setting: '(d\r$130=9999\r)',
+    'tab inside a line': 'G0\tZ5',
+    'form feed': 'G0 Z5\f',
+  };
+  for (const [name, text] of Object.entries(bad)) {
+    assert.equal(checkGcode(`${H}G0 Z5\n${text}\n`, limits).ok, false, name);
+    assert.equal(checkGcode(`${H}G0 Z5\n${text}\r\n`, limits).ok, false, `${name} (CRLF file)`);
+  }
+  // A file saved with Windows line ends is still fine.
+  const g = `${H}G0 Z5\nG0 X10 Y10\nG0 Z1\nG1 Z-1 F200\nG1 X20 F900\nG0 Z5\nM30\n`;
+  assert.deepEqual(checkGcode(g.replace(/\n/g, '\r\n'), limits).errors, []);
+  assert.deepEqual(checkGcode(g.replace(/\n/g, '\r'), limits).errors, []);
+});
+
+test('11. no move or feed before G21 and G90; nothing above the safe height; nothing off the board, even high', () => {
+  const bad = {
+    'no G21 (could be inches)': 'G90\nG0 Z5\nG0 X10 Y10\n',
+    'no G90': 'G21\nG0 Z5\nG0 X10 Y10\n',
+    'move before G21': 'G90\nG0 Z5\nG21\nG0 X10 Y10\n',
+    'feed before G21': 'G90 G1 F2000\nG21\nG0 Z5\n',
+    'first lift too high': `${H}G0 Z30\n`,
+    'final retract too high': `${H}G0 Z5\nG0 X10 Y10\nG1 Z-1 F200\nG0 Z5.1\n`,
+    'high rapid off the front-left': `${H}G0 Z5\nG0 X-50 Y10\n`,
+    'high rapid past the right edge': `${H}G0 Z5\nG0 X10 Y10\nG0 X250\n`,
+    'high rapid past the back edge': `${H}G0 Z5\nG0 X10 Y151\n`,
+    'high arc bulging off the board': `${H}G0 Z5\nG0 X2 Y50\nG2 X2 Y60 I0 J5\n`,
+  };
+  for (const [name, text] of Object.entries(bad)) assert.equal(checkGcode(text, limits).ok, false, name);
+  // Our own frame style is fine: travel at exactly the safe height, round the board's corners.
+  assert.deepEqual(checkGcode(`${H}G0 Z5\nM5\nG0 X0 Y0\nG1 X200 Y0 F900\nG1 X200 Y150\nG1 X0 Y150\nG1 X0 Y0\nM30\n`, limits).errors, []);
+  // A V-bit file's own depth limit.
+  const v = `${H}G0 Z5\nG0 X10 Y10\nG1 Z-4 F200\nG0 Z5\n`;
+  assert.deepEqual(checkGcode(v, { ...limits, maxDepthMm: 4 }).errors, []);
+  assert.equal(checkGcode(v, { ...limits, maxDepthMm: 3.5 }).ok, false);
+});
+
+test('12. every file the site makes passes the checker: shapes, text, starter projects, borders, copies, frames', async () => {
+  // text.js loads fonts with fetch('/fonts/...'); in Node read them from web/public.
+  const { readFile } = await import('node:fs/promises');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u) => {
+    const buf = await readFile(new URL(`../web/public${u}`, import.meta.url));
+    return { ok: true, arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+  };
+  try {
+    const { textLines } = await import('../web/src/text.js');
+    const { SHAPES } = await import('../shared/shapes.js');
+    const { cutArea, writeFrameGcode } = await import('../shared/gcode.js');
+    const d = await import('../shared/design.js');
+    const { BITS, ROUTERS, rpmFor, clampRects } = await import('../shared/settings.js');
+    const blocking = new Set(['offBoard', 'empty', 'tabs', 'noTabs', 'clamp']);
+    const skipped = [];
+    let made = 0;
+    const makers = {
+      ...Object.fromEntries(Object.entries(SHAPES).map(([k, s]) => [k, async () => d.makePart({ name: s.label, kind: 'shape', lines: s.make(), flipY: false })])),
+      text: async () => d.makePart({ name: 'Ava', kind: 'text', lines: await textLines('block', 'Ava', 20), fill: 'nonzero' }),
+      'bent stencil text': async () => d.makePart({ name: 'OAK', kind: 'text', lines: await textLines('stencil', 'OAK', 18, 60), fill: 'nonzero' }),
+      'text with border': async () => d.withBorder(d.makePart({ name: 'Jo', kind: 'text', lines: await textLines('script', 'Jo', 22), fill: 'nonzero' }), 4),
+      keychain: async () => d.keychainPart('Maple', await textLines('script', 'Maple', 22)),
+      sign: async () => d.doorSignPart('Room 12', await textLines('block', 'Room 12', 26)),
+      ornament: async () => d.ornamentPart(),
+    };
+    for (const bitId of Object.keys(BITS)) {
+      const config = { ...DEFAULT_CLASS_CONFIG, bit: bitId };
+      const bit = BITS[bitId];
+      for (const m of config.materials) {
+        const b = { w: m.w, h: m.h, t: m.t };
+        const keep = config.marginMm + bit.diameter + 0.2; // main.js keepOut()
+        for (const [name, make] of Object.entries(makers)) {
+          const part = await make();
+          d.placeOnBoard(part, b, keep);
+          d.fitOnBoard(part, b, keep);
+          // A class set too: as many copies as fit, clear of the clamps (main.js Copies).
+          const spots = d.gridSpots(part, 4, b, keep, 4, clampRects(m), bit.diameter / 2 + 2);
+          const sets = bitId === '102' ? [[part], spots.map((s) => ({ ...d.cloneForCopy(part), x: s.x, y: s.y }))] : [[part]];
+          for (const parts of sets) {
+            if (!parts.length) continue;
+            const r = cutRules(config, m);
+            const plan = planCut({ shapes: d.designShapes(parts, r.pocketDepth), board: b, bit, cut: { ...r, tabPoints: d.designTabPoints(parts) } });
+            if (plan.warnings.some((w) => blocking.has(w.code))) {
+              skipped.push(`${name} x${parts.length} on ${m.id} bit ${bitId}: ${plan.warnings.map((w) => w.code)}`);
+              continue; // the page makes no file
+            }
+            made++;
+            const feeds = { feed: m.feed, plunge: m.plunge, rpm: rpmFor(config, m) };
+            const notes = [`uploadmycut ${name}.nc`, `Material ${m.label} ${m.t} mm, board ${m.w} x ${m.h} mm`, `Bit ${bit.label}`,
+              'Zero X0 Y0 front-left corner, Z0 top of board', `Router ${ROUTERS[config.router].label} dial ${m.dial}`];
+            const lim = checkLimits(config, m);
+            const what = `${name} x${parts.length} on ${m.id} with bit ${bitId}`;
+            assert.deepEqual(checkGcode(writeGcode({ moves: plan.moves, feeds, safeZ: config.safeZ, notes }), lim).errors, [], what);
+            const box = cutArea(plan.moves, plan.bitRadius, b);
+            const frame = writeFrameGcode({ box, safeZ: config.safeZ, feed: m.feed, notes: [`uploadmycut ${name}-frame.nc FRAME CHECK`, 'Router OFF', notes[3]] });
+            assert.deepEqual(checkGcode(frame, lim).errors, [], `frame: ${what}`);
+          }
+        }
+      }
+    }
+    assert.ok(made >= 150, `only ${made} files made; none for: ${skipped.join('; ')}`);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
