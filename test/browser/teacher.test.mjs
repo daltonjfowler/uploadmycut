@@ -1,9 +1,10 @@
 // Teacher page: wrong key refused; right key loads, saves, and students get the new setup; reset.
 // Key: UMC_TEACHER_KEY, else TEACHER_KEY from .dev.vars (never on the command line: npm echoes it).
 import { readFileSync } from 'node:fs';
-import { BASE, OUT, check, failed, openPage } from './lib.mjs';
+import { BASE, OUT, check, failed, openPage, refuseUnlessLocal } from './lib.mjs';
 
 const base = process.argv[2] || BASE;
+refuseUnlessLocal(base, 'the teacher test');
 const key = process.env.UMC_TEACHER_KEY
   || /TEACHER_KEY=(.*)/.exec(readFileSync(new URL('../../.dev.vars', import.meta.url), 'utf8'))?.[1].trim();
 const { browser, page, errors } = await openPage({ base });

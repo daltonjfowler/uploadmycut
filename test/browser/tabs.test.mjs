@@ -1,8 +1,9 @@
 // Tab markers can be dragged and reset; the teacher's clamp areas show and block cuts near them.
 import { readFileSync } from 'node:fs';
-import { BASE, OUT, check, failed, openPage } from './lib.mjs';
+import { BASE, OUT, check, failed, openPage, refuseUnlessLocal } from './lib.mjs';
 
 const base = process.argv[2] || BASE;
+refuseUnlessLocal(base, 'the tabs and clamps test');
 const key = process.env.UMC_TEACHER_KEY
   || /TEACHER_KEY=(.*)/.exec(readFileSync(new URL('../../.dev.vars', import.meta.url), 'utf8'))?.[1].trim();
 const { browser, page, errors } = await openPage({ base });

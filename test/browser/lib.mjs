@@ -38,3 +38,22 @@ export async function openPage({ base = BASE, width = 1366, height = 768, theme 
   await page.waitForFunction(() => window.umc);
   return { browser, ctx, page, errors };
 }
+
+/** True for a dev server on this computer (never the live site). */
+export function isLocal(base) {
+  try {
+    return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Tests that change or reset the class setup refuse anything but a local dev server: run
+ * against the live site they would wipe the teacher's real setup.
+ */
+export function refuseUnlessLocal(base, what) {
+  if (isLocal(base)) return;
+  console.log(`FAIL refused: ${what} changes the class setup, so it runs only against a local dev server (not ${base})`);
+  process.exit(1);
+}
