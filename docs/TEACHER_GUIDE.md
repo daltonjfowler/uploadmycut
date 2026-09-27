@@ -40,21 +40,39 @@ Students get a new setup when they reload the page.
 
 ## Running a student's file
 
-1. Clamp or tape the board the file was made for (the preview's teacher steps show its size).
-2. Put in the class bit.
-3. Carbide Motion: *Load File*.
-4. Jog to the **front-left corner** of the board and zero X and Y there. Zero Z on the **top** of
-   the board.
-5. **Frame first:** run the `-frame.nc` file that came with it, router off. The bit traces the cut
-   area at the safe height. Check it stays on the board and clears every clamp.
-6. Set the router dial to the number in the file's steps (also in the file's first lines).
-7. Start. When Carbide Motion asks, switch the router on.
-8. After the cut, router off, vacuum, then free the parts from their tabs.
+**Rule: only run files that pass the file check.** Open [`/check/`](https://uploadmycut.com/check/)
+and drop the student's `.nc` file (and its `-frame.nc`) on it. It says **OK to run** or **Do not
+run**, with each reason in plain words. A student can hand you any `.nc` file, not only one this
+site made, so check every file, every time. The file never leaves your computer.
 
-Every file passed a check in the browser before download: it stays on the board, is no deeper than
-the board plus the cut-below depth, uses the class speeds, and has no machine settings, tool
-changes or homing commands in it. That check reduces mistakes; it does not make a cut safe. You
-check the file and stay at the machine.
+1. Check the file on [`/check/`](https://uploadmycut.com/check/). If it says *Do not run*, the
+   student makes it again on the student page.
+2. Clamp or tape the board the file was made for (the preview's teacher steps show its size;
+   the file check shows which material it checked).
+3. Put in the class bit.
+4. Carbide Motion: *Load File*.
+5. Jog to the **front-left corner** of the board and zero X and Y there. Zero Z on the **top** of
+   the board.
+6. **Frame first:** run the `-frame.nc` file that came with it, router off. The bit traces the cut
+   area at the safe height. Check it stays on the board and clears every clamp.
+7. Set the router dial to the number in the file's steps (also in the file's first lines).
+8. Start. When Carbide Motion asks, switch the router on.
+9. After the cut, router off, vacuum, then free the parts from their tabs.
+
+The student page runs the same check before every download, and `/check/` runs it again on the file
+you were actually handed: millimetres and absolute moves set first, every move on the board and no
+higher than the safe height, no deeper than the board plus the cut-below depth, the class speeds,
+and no machine settings, unlock, tool change or homing commands in it. That check reduces
+mistakes; it does not make a cut safe. You check the file and stay at the machine.
+
+## The file check page (`/check/`)
+
+Drop one or more `.nc` files. Each is checked against the class setup saved right now, for the
+material named in the file's first lines (files from the student page name it). Pick a material
+in the list to check for a different board, or when the file names none. If the page says the
+class setup did not load, it checks nothing: reload when the internet is back. If you change the
+class setup (a lower safe height, a smaller board, slower speeds), files made before may no longer
+pass: the student makes them again.
 
 ## The USB test page (`/usb-test/`)
 

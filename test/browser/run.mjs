@@ -12,7 +12,7 @@ import { isLocal } from './lib.mjs';
 const base = process.argv[2] || 'http://127.0.0.1:8791/';
 const WRITES = new Set(['tabs', 'teacher']);
 let failed = 0;
-for (const t of ['e2e', 'text', 'autosave', 'tabs', 'projects', 'teacher', 'usb', 'a11y']) {
+for (const t of ['e2e', 'text', 'autosave', 'tabs', 'projects', 'teacher', 'check', 'usb', 'a11y']) {
   if (WRITES.has(t) && !isLocal(base)) {
     console.log(`${t.padEnd(8)} skipped: it changes the class setup, so it runs only against a local dev server`);
     continue;

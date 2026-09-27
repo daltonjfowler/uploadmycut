@@ -12,6 +12,7 @@ export default defineConfig({
         main: resolve(import.meta.dirname, 'index.html'),
         teacher: resolve(import.meta.dirname, 'teacher/index.html'),
         usbTest: resolve(import.meta.dirname, 'usb-test/index.html'),
+        check: resolve(import.meta.dirname, 'check/index.html'),
       },
     },
   },

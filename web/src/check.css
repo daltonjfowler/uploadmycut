@@ -1,0 +1,12 @@
+/* Teacher file check page (web/check/). Uses style.css and teacher.css; only its own bits here. */
+.dropzone { border: 2px dashed var(--line); border-radius: var(--radius); padding: 28px 12px; text-align: center; color: var(--muted); font-weight: 600; }
+.dropzone.over { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.results { display: grid; gap: 14px; }
+.verdict { margin: 0; font-size: 1.2rem; font-weight: 750; }
+.verdict.ok { color: var(--ok); }
+.verdict.bad { color: var(--bad); }
+.result.ok { border-left: 5px solid var(--ok); }
+.result.bad { border-left: 5px solid var(--bad); }
+.reasons { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--bad); }
+.fname { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+#material { min-width: 220px; }

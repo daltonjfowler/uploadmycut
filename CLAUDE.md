@@ -27,8 +27,10 @@ All cutting maths runs in the student's browser. There is no container, so no co
   `text.js` opentype.js + fonts in `web/public/fonts` (OFL, loaded on demand), `plan-worker.js`
   runs `planCut` in a Web Worker (a newer request terminates an older one), `design-store.js`
   autosaves to IndexedDB (read back through `revivePart`). `usb-test/` + `usb-test.js`: read-only
-  Web Serial check (sends only `grbl.js` READ_ONLY). `?debug` puts `window.umc` on the page for
-  browser tests (`umc.settled()` waits for planning).
+  Web Serial check (sends only `grbl.js` READ_ONLY). `check/` + `check.js`: the teacher's file
+  check (any .nc → `checkGcode` with the live class limits from `/api/class`, in the browser, never
+  uploaded). `?debug` puts `window.umc` on the page for browser tests (`umc.settled()` waits for
+  planning).
 - `src/worker.js`: https / www redirects, security headers + CSP, `/api/health`, `/api/class`
   (public), `/api/teacher/class` (GET/PUT/DELETE, `x-teacher-key`). KV key `class`.
 - `scripts/make-icons.mjs`: draws the icon (blue tile `#1E3A8A`, arrow `#60A5FA`). Edit there.
@@ -44,12 +46,14 @@ All cutting maths runs in the student's browser. There is no container, so no co
    it), and a hole touching a part (inside it or across its edge) is cut as part of that part's
    outline. Engrave never goes deeper than board - 0.5 mm; pockets never deeper than the
    teacher's deepest pocket or board - 1 mm.
-4. Every file passes `checkGcode` before download: on the board, not deeper than board + through
-   margin, no rapid into or sideways inside the wood, no sideways move below safe height off the
-   board, first move Z only, feed within the class limit, only the allowed commands (no `$`, `M6`,
-   `G28/G30/G92/G53`, `G91`), and no `! ~ ?` or non-ASCII anywhere (GRBL realtime bytes act even
+4. Every file passes `checkGcode` before download: G21 and G90 before any move or feed, every move
+   on the board (even high up) and never above the safe height, not deeper than board + through
+   margin, no rapid into or sideways inside the wood, first move Z only, feed within the class limit,
+   only the allowed commands (no `$`, `M6`, `G28/G30/G92/G53`, `G91`), and no `! ~ ?`, control
+   characters (a bare `\r` ends a line for GRBL) or non-ASCII anywhere (GRBL realtime bytes act even
    inside comments). Never loosen it to make a file pass. test/review.test.mjs holds the bugs the
-   2026-09-26 safety review found; keep it passing.
+   2026-09-26 safety review and the 2026-09-27 security pass found, and checks every kind of file the
+   site makes; keep it passing. The teacher's `/check/` page runs the same checker on any .nc.
 5. The app never sends GRBL settings (`$x=`, `$RST`, `$N`) and never unlocks (`$X`) on its own.
 6. With a manual router, feed hold / reset / M5 do NOT stop the bit. Every STOP and every teacher
    step says to switch the router off too.

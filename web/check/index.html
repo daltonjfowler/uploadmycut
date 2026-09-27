@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uploadmycut file check</title>
+  <meta name="description" content="Teacher tool: check a student's .nc file against the class limits before running it on the Shapeoko. Nothing is uploaded.">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+  <meta name="theme-color" content="#1E3A8A">
+  <script src="/theme-boot.js"></script>
+  <script src="/logo-alive.js" defer></script>
+</head>
+<body class="page">
+  <header class="titlebar">
+    <a class="brand" href="/" style="text-decoration:none"><img src="/icon.svg" data-logo alt="" width="36" height="36">uploadmycut</a>
+    <h1 class="page-title">File check</h1>
+    <span class="grow"></span>
+    <a class="toplink" href="/teacher/">Teacher</a>
+    <a class="toplink" href="/">Student page</a>
+    <button id="theme" class="themebtn" type="button">🖥️ System</button>
+  </header>
+
+  <main class="page-main">
+    <section class="card page-card">
+      <h2>Only run files that pass this check</h2>
+      <p class="note">A student can hand you any .nc file, not only one this site made. This page runs the same safety check the student page runs before every download, with the class limits saved right now: on the board, not too deep, not too fast, no machine settings or unlock commands. <strong>The file stays on this computer. Nothing is uploaded.</strong></p>
+      <ol class="steps">
+        <li>Drop the student's <code>.nc</code> file (and its <code>-frame.nc</code>) below, or press <strong>Choose files</strong>.</li>
+        <li>Check the material the page used matches the board on the machine.</li>
+        <li>Run it in Carbide Motion only if it says <strong>OK to run</strong>. If it says <strong>Do not run</strong>, ask the student to make the file again on the student page.</li>
+      </ol>
+      <p class="safety"><strong>Still at the machine:</strong> passing this check does not replace the frame check, eye protection, or standing at the machine for the whole cut. Feed hold does not stop the router: switch the router off too.</p>
+      <p id="configMsg" class="msg" role="status">Loading the class setup…</p>
+    </section>
+
+    <section class="card page-card">
+      <div class="row">
+        <label class="lab" for="material">Material
+          <select id="material" disabled>
+            <option value="">The one named in the file</option>
+          </select>
+        </label>
+        <span class="grow"></span>
+        <button id="pick" class="primary big" type="button" disabled>Choose files</button>
+        <input id="files" type="file" accept=".nc,.gcode,.ngc,.tap,.txt" multiple hidden>
+      </div>
+      <div id="dropZone" class="dropzone" tabindex="-1">Drop .nc files here</div>
+    </section>
+
+    <div id="results" class="results" aria-live="polite"></div>
+  </main>
+
+  <script type="module" src="/src/check.js"></script>
+</body>
+</html>

@@ -40,6 +40,12 @@ for (const scheme of ['light', 'dark']) {
   await scan(page, `${scheme}: teacher page`);
   await page.goto(`${base}usb-test/`);
   await scan(page, `${scheme}: USB test page`);
+  await page.goto(`${base}check/`);
+  await page.waitForFunction(() => /loaded/.test(document.querySelector('#configMsg').textContent));
+  await page.selectOption('#material', { index: 1 });
+  await page.setInputFiles('#files', { name: 'bad.nc', mimeType: 'text/plain', buffer: Buffer.from('G21 G90\nG0 Z5\n$H\n') });
+  await page.waitForSelector('.result');
+  await scan(page, `${scheme}: file check page`);
   await page.close();
 }
 await browser.close();
