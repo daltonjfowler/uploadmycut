@@ -2,7 +2,7 @@
 // shared/svg-path.js; this file walks the document (groups, transforms, <use>) in the browser.
 
 import {
-  IDENTITY, apply, lengthToMm, multiply, parseTransform, pathToPolylines, scaleOf, shapeToPath,
+  IDENTITY, TooComplexError, apply, lengthToMm, multiply, parseTransform, pathToPolylines, scaleOf, shapeToPath,
 } from '../../shared/svg-path.js';
 
 const TOL_MM = 0.02; // curves become straight pieces within 20 µm of the curve
@@ -10,6 +10,9 @@ const SKIP = new Set(['defs', 'clipPath', 'mask', 'symbol', 'metadata', 'title',
 const SHAPES = new Set(['path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon']);
 const MAX_LINES = 5000;
 const MAX_POINTS = 400_000;
+// Elements visited, each <use> copy counted again: <use> of groups of <use> multiplies fast.
+const MAX_VISITS = 100_000;
+const TOO_COMPLEX = 'That drawing has too much detail to cut. Simplify it, or pick a simpler one.';
 
 function attrs(elem) {
   const a = {};
@@ -53,9 +56,11 @@ export function importSvg(text) {
   const lines = [];
   const notes = new Set();
   let points = 0;
+  let visits = 0;
 
   function walk(elem, m, depth) {
     if (depth > 40 || lines.length > MAX_LINES) return;
+    if (++visits > MAX_VISITS) throw new Error(TOO_COMPLEX);
     const tag = elem.localName;
     if (SKIP.has(tag) || hidden(elem)) return;
     const mine = multiply(m, parseTransform(elem.getAttribute('transform')));
@@ -83,14 +88,15 @@ export function importSvg(text) {
       if (!d) return;
       let pls;
       try {
-        pls = pathToPolylines(d, TOL_MM / scaleOf(mine));
-      } catch {
+        pls = pathToPolylines(d, TOL_MM / scaleOf(mine), MAX_POINTS - points);
+      } catch (e) {
+        if (e instanceof TooComplexError) throw new Error(TOO_COMPLEX);
         notes.add('One shape in the file was damaged and was left out.');
         return;
       }
       for (const pl of pls) {
         points += pl.points.length;
-        if (points > MAX_POINTS) throw new Error('That drawing has too much detail to cut. Simplify it, or pick a simpler one.');
+        if (points > MAX_POINTS) throw new Error(TOO_COMPLEX);
         lines.push({ points: pl.points.map((p) => apply(mine, p)), closed: pl.closed });
       }
       return;

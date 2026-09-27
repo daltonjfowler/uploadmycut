@@ -269,3 +269,59 @@ test('12. every file the site makes passes the checker: shapes, text, starter pr
     globalThis.fetch = realFetch;
   }
 });
+
+// A tiny stand-in for the browser's DOMParser, enough for svg-import.js on simple test drawings.
+function fakeDomParser() {
+  return class {
+    parseFromString(text) {
+      const all = [];
+      const root = { children: [] };
+      const stack = [root];
+      for (const [, close, tag, rest, self] of text.matchAll(/<(\/?)([\w:]+)([^>]*?)(\/?)>/g)) {
+        if (close) {
+          stack.pop();
+          continue;
+        }
+        const attributes = [...rest.matchAll(/([\w:-]+)="([^"]*)"/g)].map(([, name, value]) => ({ name, value }));
+        const get = (n) => attributes.find((a) => a.name === n)?.value ?? null;
+        const el = { localName: tag, nodeName: tag, attributes, children: [], getAttribute: get, getAttributeNS: (ns, n) => get(`xlink:${n}`) };
+        stack[stack.length - 1].children.push(el);
+        all.push(el);
+        if (!self) stack.push(el);
+      }
+      return {
+        documentElement: root.children[0],
+        querySelector: () => null,
+        querySelectorAll: () => all.filter((e) => e.getAttribute('id') !== null),
+      };
+    }
+  };
+}
+
+test('13. a drawing that multiplies through <use>, or has huge curves, stops quickly with the friendly message', async () => {
+  const { pathToPolylines, TooComplexError } = await import('../shared/svg-path.js');
+  // One curve alone may make 1000 points; the budget stops it part way.
+  assert.throws(() => pathToPolylines('M0 0C0 1000 1000 1000 1000 0', 0.0001, 100), TooComplexError);
+  assert.equal(pathToPolylines('M0 0C0 10 10 10 10 0', 0.01, 1000)[0].closed, false);
+  const realParser = globalThis.DOMParser;
+  globalThis.DOMParser = fakeDomParser();
+  try {
+    const { importSvg } = await import('../web/src/svg-import.js');
+    // Ten copies of ten copies of ... 12 levels deep: 10^12 visits if nothing stops it.
+    let defs = '<path id="u0" d="M0 0"/>'; // no line at all, so the 5000-line stop never comes
+    for (let k = 1; k <= 12; k++) defs += `<g id="u${k}">${Array.from({ length: 10 }, () => `<use href="#u${k - 1}"/>`).join('')}</g>`;
+    const bomb = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs>${defs}</defs><use href="#u12"/></svg>`;
+    const t0 = Date.now();
+    assert.throws(() => importSvg(bomb), /too much detail/);
+    assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
+    // Many copies of one heavy curve: the running point budget stops it before the copies finish.
+    const heavy = 'M0 0' + 'C0 900 900 900 900 0'.repeat(20);
+    const copies = `<svg viewBox="0 0 1000 1000" width="1000mm" height="1000mm"><defs><path id="h" d="${heavy}"/></defs>${'<use href="#h"/>'.repeat(200)}</svg>`;
+    assert.throws(() => importSvg(copies), /too much detail/);
+    // An ordinary drawing still opens.
+    const ok = importSvg('<svg viewBox="0 0 100 100" width="100mm" height="100mm"><g><rect x="10" y="10" width="30" height="20"/><use href="#c"/></g><defs><circle id="c" cx="70" cy="70" r="10"/></defs></svg>');
+    assert.equal(ok.lines.length, 2);
+  } finally {
+    globalThis.DOMParser = realParser;
+  }
+});

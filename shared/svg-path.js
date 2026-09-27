@@ -132,21 +132,33 @@ function arcPoints(p0, rx, ry, phiDeg, large, sweep, p1, tol) {
   return pts;
 }
 
-/** Path data → polylines, in the path's own units. */
-export function pathToPolylines(d, tol = 0.05) {
+/** Thrown by pathToPolylines when the points would pass the caller's budget. */
+export class TooComplexError extends Error {}
+
+/**
+ * Path data → polylines, in the path's own units. `maxPoints` stops early (TooComplexError) once
+ * that many points are made, so a huge drawing cannot freeze the page before the caller's check.
+ */
+export function pathToPolylines(d, tol = 0.05, maxPoints = Infinity) {
   const out = [];
   let cur = null; // current polyline
   let pos = [0, 0];
   let start = [0, 0];
   let lastCtrl = null; // for S/T reflection
   let lastCmd = '';
+  let made = 0;
+  const count = () => {
+    if (++made > maxPoints) throw new TooComplexError('too many points');
+  };
   const begin = (p) => {
     if (cur && cur.points.length > 1) out.push(cur);
+    count();
     cur = { points: [p], closed: false };
     start = p;
   };
   const lineTo = (p) => {
     if (!cur) begin(pos);
+    count();
     cur.points.push(p);
   };
   for (const { cmd, args } of tokenizePath(d)) {
