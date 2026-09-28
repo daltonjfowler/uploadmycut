@@ -13,11 +13,11 @@ import { SHAPES } from '../../shared/shapes.js';
 import {
   cloneForCopy, designShapes, designTabPoints, doorSignPart, fitOnBoard, gridSpots, keychainPart, makePart, ornamentPart, partBounds, partSize, placeOnBoard, revivePart, snapshot, toBoard, toLocal, withBorder,
 } from '../../shared/design.js';
-import { estimateSeconds, JOB_LABELS, planCut } from '../../shared/cam.js';
+import { estimateSeconds, JOB_LABELS, planJob } from '../../shared/cam.js';
 import { cutArea, writeFrameGcode, writeGcode } from '../../shared/gcode.js';
 import { checkGcode } from '../../shared/check-gcode.js';
 import {
-  BITS, DEFAULT_CLASS_CONFIG, MACHINES, ROUTERS, checkLimits, clampRects, cutRules, ncFileName, rpmFor, validateClassConfig,
+  BITS, DEFAULT_CLASS_CONFIG, MACHINES, ROUTERS, V_BITS, checkLimits, clampRects, cutRules, ncFileName, rpmFor, validateClassConfig, vRules,
 } from '../../shared/settings.js';
 
 const MATERIAL_KEY = 'umc.material';
@@ -27,13 +27,14 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const BLOCKING = new Set(['offBoard', 'empty', 'tabs', 'noTabs', 'clamp']);
 
 const JOB_HELP = {
+  vcarve: 'Sharp V grooves for signs (V-bit)',
   cutout: 'Cuts around the outside and frees the part',
   hole: 'Cuts inside the line, all the way through',
   engrave: 'Bit follows the line, not deep',
   pocket: 'Digs out the inside to a depth',
   skip: 'Leave this line alone',
 };
-const CLOSED_ONLY = new Set(['cutout', 'hole', 'pocket']);
+const CLOSED_ONLY = new Set(['cutout', 'hole', 'pocket', 'vcarve']);
 
 const state = {
   config: DEFAULT_CLASS_CONFIG,
@@ -63,7 +64,12 @@ function bit() {
 function rules() {
   return cutRules(state.config, material());
 }
+function hasVBit() {
+  return !!state.config.vBit && state.config.vBit !== 'none';
+}
+
 function allowed(job) {
+  if (job === 'vcarve' && !hasVBit()) return false;
   return job === 'skip' || state.config.jobs[job] !== false;
 }
 
@@ -330,7 +336,7 @@ function planInWorker(args) {
     startWorker();
   }
   if (!worker) startWorker();
-  if (!worker) return Promise.resolve(planCut(args));
+  if (!worker) return Promise.resolve(planJob(args));
   return new Promise((resolve, reject) => {
     inFlight = { id: ++planId, resolve, reject };
     worker.postMessage({ id: planId, args });
@@ -342,13 +348,13 @@ async function planNow() {
   clearTimeout(planTimer);
   planTimer = 0;
   const r = rules();
-  const args = { shapes: designShapes(state.parts, r.pocketDepth), board: board(), bit: bit(), cut: { ...r, tabPoints: designTabPoints(state.parts) } };
+  const args = { shapes: designShapes(state.parts, r.pocketDepth), board: board(), bit: bit(), cut: { ...r, tabPoints: designTabPoints(state.parts) }, vrules: vRules(state.config, material()) };
   let plan;
   try {
     plan = await planInWorker(args);
   } catch (e) {
     if (e.message === 'superseded') return null;
-    plan = planCut(args); // the worker failed: do it here
+    plan = planJob(args); // the worker failed: do it here
   }
   state.plan = plan;
   view.setWarnings(plan.warnings);
@@ -411,35 +417,61 @@ function frameFileName() {
   return ncFileName(state.fileName).replace(/\.nc$/, '-frame.nc');
 }
 
+// The files for a design: one cut file, or (with V-carving) the V-bit file first, then the flat
+// bit's file. Cut through always comes last, so the V-carve runs while the board is still whole.
 function buildResult(plan) {
   const m = material();
   const b = bit();
-  const feeds = { feed: m.feed, plunge: m.plunge, rpm: rpmFor(state.config, m) };
+  const vb = V_BITS[state.config.vBit];
+  const rpm = rpmFor(state.config, m);
   if (!state.fileName) state.fileName = state.parts[0]?.name ?? '';
-  const name = ncFileName(state.fileName);
-  const notes = [
-    `uploadmycut ${name}`,
+  const base = ncFileName(state.fileName).replace(/\.nc$/, '');
+  const v = plan.vplan?.moves.length ? plan.vplan : null;
+  const flat = plan.moves.length ? plan : null;
+  const two = !!(v && flat);
+  const header = (fileName, bitLabel, dial, which) => [
+    `uploadmycut ${fileName}${which ? ` ${which}` : ''}`,
     `Material ${m.label} ${m.t} mm, board ${m.w} x ${m.h} mm`,
-    `Bit ${b.label}`,
+    `Bit ${bitLabel}`,
     'Zero X0 Y0 front-left corner, Z0 top of board',
-    `Router ${ROUTERS[state.config.router].label} dial ${m.dial}`,
+    `Router ${ROUTERS[state.config.router].label} dial ${dial}`,
   ];
-  const gcode = writeGcode({ moves: plan.moves, feeds, safeZ: state.config.safeZ, notes });
-  const check = checkGcode(gcode, checkLimits(state.config, m));
-  const seconds = estimateSeconds(plan.moves, feeds);
-  const image = carveImage(plan.moves, board(), plan.bitRadius, { dark: isDark() });
-  // The frame check (uploadmylaser's lesson: frame before every job): router off, trace the cut area.
-  const box = cutArea(plan.moves, plan.bitRadius, board());
+  const files = [];
+  if (v) {
+    const name = two ? `${base}-1-vcarve.nc` : `${base}.nc`;
+    const feeds = { feed: state.config.vFeed, plunge: state.config.vPlunge, rpm };
+    const gcode = writeGcode({ moves: v.moves, feeds, safeZ: state.config.safeZ, notes: header(name, vb.label, m.dial, two ? 'FILE 1 OF 2' : '') });
+    files.push({ name, gcode, bit: vb.short, check: checkGcode(gcode, checkLimits(state.config, m, true)), seconds: estimateSeconds(v.moves, feeds), moves: v.moves });
+  }
+  if (flat) {
+    const name = two ? `${base}-2-cut.nc` : `${base}.nc`;
+    const feeds = { feed: m.feed, plunge: m.plunge, rpm };
+    const gcode = writeGcode({ moves: flat.moves, feeds, safeZ: state.config.safeZ, notes: header(name, b.label, m.dial, two ? 'FILE 2 OF 2' : '') });
+    files.push({ name, gcode, bit: b.short, check: checkGcode(gcode, checkLimits(state.config, m)), seconds: estimateSeconds(flat.moves, feeds), moves: flat.moves });
+  }
+  const image = carveImage(flat?.moves ?? [], board(), plan.bitRadius, { dark: isDark(), vmoves: v?.moves, vangle: v?.angle });
+  // The frame check (uploadmylaser's lesson: frame before every job): router off, trace the cut area
+  // of every file together.
+  const boxes = [flat && cutArea(flat.moves, plan.bitRadius, board()), v && cutArea(v.moves, v.reach, board())].filter(Boolean);
+  const box = boxes.length ? {
+    minX: Math.min(...boxes.map((x) => x.minX)), minY: Math.min(...boxes.map((x) => x.minY)),
+    maxX: Math.max(...boxes.map((x) => x.maxX)), maxY: Math.max(...boxes.map((x) => x.maxY)),
+  } : null;
   const frame = box
     ? writeFrameGcode({
       box,
       safeZ: state.config.safeZ,
       feed: m.feed,
-      notes: [`uploadmycut ${frameFileName()} FRAME CHECK`, 'Router OFF. The bit traces the cut area in the air', notes[3]],
+      notes: [`uploadmycut ${frameFileName()} FRAME CHECK`, 'Router OFF. The bit traces the cut area in the air', 'Zero X0 Y0 front-left corner, Z0 top of board'],
     })
     : null;
   const frameCheck = frame ? checkGcode(frame, checkLimits(state.config, m)) : null;
-  state.result = { gcode, check, seconds, image, feeds, frame, frameCheck };
+  state.result = {
+    files, two, image, frame, frameCheck,
+    seconds: files.reduce((t, f) => t + f.seconds, 0),
+    ok: files.length > 0 && files.every((f) => f.check.ok),
+    moves: files.flatMap((f) => f.moves),
+  };
 }
 
 function showStage() {
@@ -453,7 +485,7 @@ function showStage() {
   $('#panel').hidden = preview;
   $('#previewPanel').hidden = !preview;
   $('.open-group').hidden = preview;
-  view.setMode(state.stage, preview ? { moves: state.plan.moves, image: state.result.image, showPath: state.showPath } : null);
+  view.setMode(state.stage, preview ? { moves: state.result.moves, image: state.result.image, showPath: state.showPath } : null);
   if (preview) renderPreview();
   renderAction();
 }
@@ -507,7 +539,7 @@ function renderPanel() {
       <div class="section">
         <div class="row"><h2 class="grow">Job</h2><span class="note">${picked} of ${part.lines.length} line${part.lines.length === 1 ? '' : 's'}</span></div>
         <div class="jobs" role="group" aria-label="Job for the picked lines">
-          ${['cutout', 'hole', 'engrave', 'pocket', 'skip'].map((j) => {
+          ${['cutout', 'hole', 'engrave', 'pocket', ...(hasVBit() ? ['vcarve'] : []), 'skip'].map((j) => {
             const off = !allowed(j) ? 'Your teacher turned this off.' : (CLOSED_ONLY.has(j) && allOpen ? 'Only for closed shapes. This line has open ends.' : '');
             const on = jobsOfPicked.size === 1 && jobsOfPicked.has(j);
             return `<button class="job ${j}${on ? ' on' : ''}" type="button" data-job="${j}" aria-pressed="${on}" ${off ? `disabled title="${esc(off)}"` : ''}>
@@ -606,8 +638,24 @@ function fmtTime(s) {
 function renderPreview() {
   const r = state.result;
   const m = material();
-  const deep = state.plan.moves.filter((v) => v.z < 0);
+  const deep = r.moves.filter((v) => v.z < 0);
   const depth = deep.length ? -Math.min(...deep.map((v) => v.z)) : 0;
+  const failed = r.files.filter((f) => !f.check.ok);
+  const vb = V_BITS[state.config.vBit];
+  const fileButtons = r.files.map((f, i) => `<button id="${i ? `download${i + 1}` : 'download'}" class="primary big wide" type="button" data-file="${i}" ${r.ok ? '' : 'disabled'}>⬇ ${r.two ? `${i + 1}: ` : 'Download '}${esc(f.name)}</button>`).join('');
+  const steps = r.two
+    ? `<li>Clamp or tape the board: ${esc(m.label)} (${fmt(m.w)} × ${fmt(m.h)} mm). Clamps stay out of the cut.</li>
+        <li>Put in the <strong>${esc(vb.short)}</strong>.</li>
+        <li>Carbide Motion: Load File, then zero X and Y on the <strong>front-left corner</strong> and Z on the <strong>top</strong> of the board.</li>
+        <li><strong>Frame first:</strong> run <code>${esc(frameFileName())}</code> with the router off. Check it stays on the board and clears every clamp.</li>
+        <li>Router dial <strong>${esc(String(m.dial))}</strong>. Run <code>${esc(r.files[0].name)}</code>, switch on the router when asked.</li>
+        <li>Router off. Swap to the <strong>${esc(bit().short)}</strong>. Zero <strong>Z only</strong>, on the top of the board. Do not touch the X and Y zero.</li>
+        <li>Run <code>${esc(r.files[1].name)}</code>, switch on the router when asked.</li>`
+    : `<li>Clamp or tape the board: ${esc(m.label)} (${fmt(m.w)} × ${fmt(m.h)} mm). Clamps stay out of the cut.</li>
+        <li>Put in the ${esc(r.files[0]?.bit ?? bit().short)}.</li>
+        <li>Carbide Motion: Load File, then zero X and Y on the <strong>front-left corner</strong> and Z on the <strong>top</strong> of the board.</li>
+        <li><strong>Frame first:</strong> run <code>${esc(frameFileName())}</code> with the router off. The bit traces the cut area ${esc(String(state.config.safeZ))} mm above the board. Check it stays on the board and clears every clamp.</li>
+        <li>Router dial <strong>${esc(String(m.dial))}</strong>. Start the job, switch on the router when asked.</li>`;
   const box = $('#previewPanel');
   box.innerHTML = `
     <div class="section">
@@ -615,57 +663,60 @@ function renderPreview() {
       <div class="result-big">about ${fmtTime(r.seconds)}</div>
       <dl class="facts">
         <dt>Deepest</dt><dd>${fmt(depth, 1)} mm</dd>
-        <dt>Bit</dt><dd>${esc(bit().short)}</dd>
+        <dt>${r.two ? 'Bits' : 'Bit'}</dt><dd>${esc(r.files.map((f) => f.bit).join(', then '))}</dd>
         <dt>Material</dt><dd>${esc(m.label)}, ${fmt(m.t, 1)} mm</dd>
-        <dt>Lines</dt><dd>${fmt(r.gcode.split('\n').length)}</dd>
+        <dt>Lines</dt><dd>${fmt(r.files.reduce((n, f) => n + f.gcode.split('\n').length, 0))}</dd>
       </dl>
       <label class="check"><input id="showPath" type="checkbox" ${state.showPath ? 'checked' : ''}> Show the bit's path</label>
     </div>
     <div class="section">
-      ${r.check.ok
-        ? '<div class="msg ok"><b>✓</b><span>Passed the class limits check: on the board, not too deep, class speeds. That does not make a cut safe: your teacher checks it and stays at the machine.</span></div>'
-        : `<div class="msg bad"><b>✕</b><span>The file did not pass the safety check. Tell your teacher:<br>${r.check.errors.map((e) => esc(`line ${e.line}: ${e.message}`)).join('<br>')}</span></div>`}
+      ${failed.length === 0
+        ? `<div class="msg ok"><b>✓</b><span>Passed the class limits check: on the board, not too deep, class speeds. That does not make a cut safe: your teacher checks it and stays at the machine.</span></div>`
+        : `<div class="msg bad"><b>✕</b><span>The file did not pass the safety check. Tell your teacher:<br>${failed.flatMap((f) => f.check.errors.map((e) => esc(`${f.name} line ${e.line}: ${e.message}`))).join('<br>')}</span></div>`}
+      ${r.two ? '<p class="note">Two files: the V-bit carves first, then the flat bit cuts. Your teacher swaps the bit in between.</p>' : ''}
       <label class="name-field">File name
         <input id="fileName" type="text" maxlength="40" value="${esc(state.fileName)}" placeholder="my-cut" spellcheck="false"></label>
-      <button id="download" class="primary big wide" type="button" ${r.check.ok ? '' : 'disabled'}>⬇ Download ${esc(ncFileName(state.fileName))}</button>
-      <button id="downloadFrame" class="wide" type="button" ${r.check.ok && r.frameCheck?.ok ? '' : 'disabled'}>⬚ Frame check: ${esc(frameFileName())}</button>
+      ${fileButtons}
+      <button id="downloadFrame" class="wide" type="button" ${r.ok && r.frameCheck?.ok ? '' : 'disabled'}>⬚ Frame check: ${esc(frameFileName())}</button>
       <p class="note">The frame check file moves the bit around the cut area high in the air, router off, so your teacher sees where it cuts before the real file runs.</p>
     </div>
     <div class="section">
       <h2>For the teacher</h2>
       <ol class="steps">
-        <li>Clamp or tape the board: ${esc(m.label)} (${fmt(m.w)} × ${fmt(m.h)} mm). Clamps stay out of the cut.</li>
-        <li>Put in the ${esc(bit().short)}.</li>
-        <li>Carbide Motion: Load File, then zero X and Y on the <strong>front-left corner</strong> and Z on the <strong>top</strong> of the board.</li>
-        <li><strong>Frame first:</strong> run <code>${esc(frameFileName())}</code> with the router off. The bit traces the cut area ${esc(String(state.config.safeZ))} mm above the board. Check it stays on the board and clears every clamp.</li>
-        <li>Router dial <strong>${esc(String(m.dial))}</strong>. Start the job, switch on the router when asked.</li>
+        ${steps}
       </ol>
       <p class="safety"><strong>Stay at the machine.</strong> Eye and ear protection on. Pause or stop in Carbide Motion does not stop the router: switch the router off too.</p>
     </div>`;
   $('#showPath').addEventListener('change', (e) => {
     state.showPath = e.target.checked;
-    view.setMode('preview', { moves: state.plan.moves, image: state.result.image, showPath: state.showPath });
+    view.setMode('preview', { moves: state.result.moves, image: state.result.image, showPath: state.showPath });
   });
   $('#fileName').addEventListener('input', (e) => {
     state.fileName = e.target.value;
     scheduleSave();
-    $('#download').textContent = `⬇ Download ${ncFileName(state.fileName)}`;
+    // Only the labels change here; the files are rebuilt with the new name on download.
+    const base = ncFileName(state.fileName).replace(/\.nc$/, '');
+    box.querySelectorAll('[data-file]').forEach((b, i) => {
+      const name = r.two ? `${base}-${i + 1}-${i ? 'cut' : 'vcarve'}.nc` : `${base}.nc`;
+      b.textContent = `⬇ ${r.two ? `${i + 1}: ` : 'Download '}${name}`;
+    });
     $('#downloadFrame').textContent = `⬚ Frame check: ${frameFileName()}`;
   });
-  $('#download').addEventListener('click', download);
+  for (const b of box.querySelectorAll('[data-file]')) b.addEventListener('click', () => download(Number(b.dataset.file)));
   $('#downloadFrame').addEventListener('click', () => download('frame'));
 }
 
-function download(which = 'cut') {
-  // Rebuild the header with the name as typed now.
+function download(which = 0) {
+  // Rebuild the headers with the name as typed now.
   buildResult(state.plan);
   const frame = which === 'frame';
-  if (!state.result.check.ok || (frame && !state.result.frameCheck?.ok)) {
+  const file = frame ? null : state.result.files[which];
+  if (!state.result.ok || (frame && !state.result.frameCheck?.ok) || (!frame && !file)) {
     renderPreview();
     return;
   }
-  const name = frame ? frameFileName() : ncFileName(state.fileName);
-  const text = frame ? state.result.frame : state.result.gcode;
+  const name = frame ? frameFileName() : file.name;
+  const text = frame ? state.result.frame : file.gcode;
   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
   const a = el('a', { href: url, download: name });
   document.body.append(a);
@@ -730,8 +781,8 @@ const view = new BoardView($('#board'), {
 initThemeButton($('#theme'));
 onThemeChange(() => {
   if (state.stage === 'preview' && state.plan) {
-    state.result.image = carveImage(state.plan.moves, board(), state.plan.bitRadius, { dark: isDark() });
-    view.setMode('preview', { moves: state.plan.moves, image: state.result.image, showPath: state.showPath });
+    buildResult(state.plan);
+    view.setMode('preview', { moves: state.result.moves, image: state.result.image, showPath: state.showPath });
   }
 });
 

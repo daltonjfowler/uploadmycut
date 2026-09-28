@@ -258,7 +258,7 @@ export function snapshot(parts) {
   return parts.map((p) => ({ ...p, jobs: p.jobs.slice() }));
 }
 
-const SAVED_JOBS = new Set(['cutout', 'hole', 'engrave', 'pocket', 'skip']);
+const SAVED_JOBS = new Set(['cutout', 'hole', 'engrave', 'pocket', 'vcarve', 'skip']);
 const MAX_SAVED_POINTS = 400_000;
 
 /**

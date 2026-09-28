@@ -78,6 +78,19 @@
         <p class="note">Safe height must clear your clamps. Tabs hold cut-out parts so they cannot fly; cut them free with a flush saw or knife after.</p>
       </section>
 
+      <!-- Hidden while shared/settings.js V_CARVE_ENABLED is false (web/src/teacher.js). -->
+      <section id="vCarveCard" class="card page-card" hidden>
+        <h2>V-carving (a second bit)</h2>
+        <div class="grid3">
+          <label class="lab">V-bit<select id="vBit"></select></label>
+          <label class="lab">V-carve feed mm/min<input id="vFeed" class="text" type="number" step="10"></label>
+          <label class="lab">V-carve plunge mm/min<input id="vPlunge" class="text" type="number" step="10"></label>
+          <label class="lab">V-carve depth per pass mm<input id="vDepthPerPass" class="text" type="number" step="0.1"></label>
+          <label class="lab">Deepest V-carve mm<input id="vMaxDepth" class="text" type="number" step="0.5"></label>
+        </div>
+        <p class="note">Pick a V-bit to give students a <strong>V-carve</strong> job for sharp sign letters. A design with V-carving and cutting makes two files: the V-bit runs first, then you swap to the class bit and zero Z only. Starting values (not tested at school): 1000 mm/min, plunge 300, 1.5 mm per pass. Wider strokes than the deepest V-carve allows keep a flat top in the middle.</p>
+      </section>
+
       <section class="card page-card">
         <h2>Note to the class</h2>
         <textarea id="note" class="text" rows="3" maxlength="400" placeholder="Shown on every student's board panel."></textarea>

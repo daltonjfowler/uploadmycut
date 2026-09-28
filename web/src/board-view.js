@@ -15,8 +15,8 @@ const TAB_PX = 6; // tab marker radius on screen
 const ROTATE_GAP_PX = 28;
 
 export const JOB_COLOURS = {
-  light: { cutout: '#c2410c', hole: '#7e22ce', engrave: '#1d4ed8', pocket: '#0f766e', skip: '#9aa3ad' },
-  dark: { cutout: '#fb923c', hole: '#c084fc', engrave: '#60a5fa', pocket: '#2dd4bf', skip: '#6e7681' },
+  light: { cutout: '#c2410c', hole: '#7e22ce', engrave: '#1d4ed8', pocket: '#0f766e', vcarve: '#be185d', skip: '#9aa3ad' },
+  dark: { cutout: '#fb923c', hole: '#c084fc', engrave: '#60a5fa', pocket: '#2dd4bf', vcarve: '#f472b6', skip: '#6e7681' },
 };
 
 function palette() {

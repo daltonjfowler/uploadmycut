@@ -20,8 +20,8 @@ import {
   segmentInside, significant, simplifyLine, union,
 } from './geometry.js';
 
-export const JOBS = ['cutout', 'hole', 'engrave', 'pocket', 'skip'];
-export const JOB_LABELS = { cutout: 'Cut out', hole: 'Cut hole', engrave: 'Engrave', pocket: 'Pocket', skip: "Don't cut" };
+export const JOBS = ['cutout', 'hole', 'engrave', 'pocket', 'vcarve', 'skip'];
+export const JOB_LABELS = { cutout: 'Cut out', hole: 'Cut hole', engrave: 'Engrave', pocket: 'Pocket', vcarve: 'V-carve', skip: "Don't cut" };
 const CLEARANCE_MM = 1; // rapid down to this far above the board, then plunge
 // Lost spots narrower than this are not worth a warning. Every round bit leaves round inside
 // corners (a square corner keeps a sliver about 0.34 x the bit radius wide), so the bar grows
@@ -569,4 +569,100 @@ export function estimateSeconds(moves, feeds, rapid = { xy: 5000, z: 1500 }) {
     prev = v;
   }
   return t * 1.1; // corners slow the machine down a little
+}
+
+// ---- V-carving (a second bit: the V-bit) ----
+//
+// The V-bit's cone cuts wider the deeper it goes: at depth z it cuts |z| x tan(angle / 2) to each
+// side. So a ring of the shape shrunk by d, cut at depth d / tan(angle / 2), reaches exactly the
+// drawn line. Rings every V_STEP_MM from the line inward, each a little deeper, carve the shape
+// into a V: sharp corners, a ridge down the middle of every stroke. Shallow rings go first.
+// Rings never go deeper than the teacher's deepest V-carve; a stroke wider than that leaves its
+// middle at the top (a warning, not an error).
+
+const V_STEP_MM = 0.25;
+
+/**
+ * Plan every V-carve for the V-bit.
+ * @param {object} p
+ * @param {Array} p.shapes closed shapes with job 'vcarve' (group and fill as for pockets)
+ * @param {{w: number, h: number, t: number}} p.board
+ * @param {object} p.rules from settings.js vRules: bit { angle }, depthPerPass, maxDepth, safeZ,
+ *   marginMm, clamps
+ */
+export function planVCarve({ shapes: input, board, rules }) {
+  const warnings = [];
+  const m = new Moves(rules.safeZ);
+  const k = Math.tan(((rules.bit.angle / 2) * Math.PI) / 180); // surface reach per mm of depth
+  const maxDepth = Math.max(0.1, Math.min(rules.maxDepth, board.t - 1));
+  const maxInset = maxDepth * k;
+  const groups = new Map();
+  for (const s of input) {
+    if (s.job !== 'vcarve' || !s.closed) continue;
+    const key = s.group ?? '';
+    if (!groups.has(key)) groups.set(key, { fill: s.fill === 'nonzero' ? 'nonzero' : 'evenodd', polys: [] });
+    groups.get(key).polys.push(simplifyLine(s.points, true, 0.01));
+  }
+  for (const { fill, polys } of groups.values()) {
+    const region = union(polys, fill);
+    if (!region.length) continue;
+    let first = true;
+    for (let d = V_STEP_MM; d <= maxInset + 1e-9; d += V_STEP_MM) {
+      const rings = offset(region, -d);
+      if (!rings.length) break;
+      const z = -Math.round((d / k) * 1000) / 1000;
+      for (const ring of rings) {
+        const loop = rotateToNearest(ring, [m.x ?? ring[0][0], m.y ?? ring[0][1]]);
+        // Inside one drawing, hop between rings just above the board; the first ring comes from
+        // the safe height.
+        if (first) {
+          m.enterAt(loop[0], passDepths(-z, rules.depthPerPass)[0]);
+          first = false;
+        } else {
+          if (m.z < CLEARANCE_MM) m.push('rapid', m.x, m.y, CLEARANCE_MM);
+          m.push('rapid', loop[0][0], loop[0][1], CLEARANCE_MM);
+        }
+        for (const zz of passDepths(-z, rules.depthPerPass)) {
+          m.plunge(zz);
+          lap(m, loop, zz, null);
+        }
+      }
+    }
+    m.retract();
+    const middle = offset(region, -(maxInset + V_STEP_MM));
+    if (middle.length) {
+      warnings.push({
+        code: 'vwide', job: 'vcarve', where: middle,
+        message: 'These parts are wider than the V-bit can carve at its deepest, so their middles stay at the top. Make them thinner, or pocket them.',
+      });
+    }
+  }
+  // Board edge and clamps: the cone reaches at most maxInset from its centre at the top.
+  const deep = m.list.filter((v) => v.z < 0);
+  if (deep.length) {
+    const gap = rules.marginMm ?? 0;
+    const off = deep.some((v) => v.x - maxInset < gap - 1e-6 || v.y - maxInset < gap - 1e-6 || v.x + maxInset > board.w - gap + 1e-6 || v.y + maxInset > board.h - gap + 1e-6);
+    if (off) warnings.push({ code: 'offBoard', message: `Part of the V-carve is off the board or closer than ${gap} mm to its edge. Move it in.` });
+    const hit = (rules.clamps ?? []).filter((c) => moveNearRect(m.list, c, maxInset + CLAMP_CLEAR_MM, rules.safeZ));
+    if (hit.length) {
+      warnings.push({
+        code: 'clamp',
+        where: hit.map((c) => [[c.x, c.y], [c.x + c.w, c.y], [c.x + c.w, c.y + c.h], [c.x, c.y + c.h]]),
+        message: 'The V-carve goes into a clamp. Move your drawing away from the grey clamp areas.',
+      });
+    }
+  }
+  return { moves: m.list, warnings, reach: maxInset, angle: rules.bit.angle };
+}
+
+/** Both plans for a design: the class bit's and, when the class has a V-bit, the V-carve's. */
+export function planJob({ shapes, board, bit, cut, vrules }) {
+  const main = planCut({ shapes, board, bit, cut });
+  const hasV = shapes.some((s) => s.job === 'vcarve');
+  if (!hasV || !vrules) return { ...main, vplan: null };
+  const vplan = planVCarve({ shapes, board, rules: vrules });
+  // A design with only V-carving has nothing for the flat bit: that is not an "empty" problem.
+  const warnings = main.warnings.filter((w) => !(w.code === 'empty' && vplan.moves.length));
+  if (!main.moves.length && !vplan.moves.length) warnings.push({ code: 'empty', message: 'Nothing to cut yet. Give a shape a job.' });
+  return { ...main, warnings: [...vplan.warnings, ...warnings], vplan };
 }

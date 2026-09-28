@@ -5,7 +5,7 @@ import { planCut, projectOnLoop, pointAtLength, moveNearRect } from '../shared/c
 import { writeGcode } from '../shared/gcode.js';
 import { checkGcode } from '../shared/check-gcode.js';
 import { makePart, designTabPoints, toBoard } from '../shared/design.js';
-import { DEFAULT_CLASS_CONFIG, clampRects, validateClassConfig } from '../shared/settings.js';
+import { DEFAULT_CLASS_CONFIG, V_CARVE_ENABLED, clampRects, validateClassConfig } from '../shared/settings.js';
 
 const sq = (x, y, w, h = w) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
 const board = { w: 200, h: 150, t: 12 };
@@ -136,4 +136,70 @@ test('bend: straight stays put; arch up drops the ends and tilts them; arch down
   const top = bendLetter([[95, -20]], 95, 100, 90)[0];
   assert.ok(top[0] > endUp[0], 'top of the right-end letter leans right');
   assert.deepEqual(bendLetter([[1, 1]], 0, 100, 999)[0].map((v) => Number.isFinite(v)), [true, true], 'bend is capped');
+});
+
+import { planVCarve, planJob } from '../shared/cam.js';
+import { vRules, checkLimits as limitsFor } from '../shared/settings.js';
+
+test('V-carve: rings reach the line; depth follows the bit angle; capped at the deepest', () => {
+  const stroke = [{ points: sq(50, 50, 6, 30), closed: true, job: 'vcarve', group: 'a' }];
+  const rules = { bit: { angle: 90 }, depthPerPass: 1.5, maxDepth: 4, safeZ: 5, marginMm: 5, clamps: [] };
+  const v90 = planVCarve({ shapes: stroke, board, rules });
+  const deep90 = Math.min(...v90.moves.map((v) => v.z));
+  assert.ok(Math.abs(deep90 + 2.75) < 1e-6, String(deep90)); // 6 mm stroke: half is 3 mm, last ring at 2.75
+  const v60 = planVCarve({ shapes: stroke, board, rules: { ...rules, bit: { angle: 60 }, maxDepth: 6 } }); // deep enough not to cap
+  const deep60 = Math.min(...v60.moves.map((v) => v.z));
+  assert.ok(Math.abs(deep60 + 2.75 / Math.tan(Math.PI / 6)) < 0.01, String(deep60)); // 60°: deeper for the same width
+  assert.equal(Math.min(...planVCarve({ shapes: stroke, board, rules: { ...rules, bit: { angle: 60 }, maxDepth: 3 } }).moves.map((v) => v.z)) >= -3, true);
+  // No single move goes deeper than one pass below the previous depth at that spot: passes step down.
+  for (let i = 1; i < v90.moves.length; i++) {
+    const a = v90.moves[i - 1];
+    const b = v90.moves[i];
+    if (b.k === 'plunge' && a.x === b.x && a.y === b.y && a.z < 0) assert.ok(a.z - b.z <= 1.5 + 1e-6);
+  }
+  const wide = planVCarve({ shapes: [{ points: sq(50, 50, 40), closed: true, job: 'vcarve' }], board, rules });
+  assert.ok(wide.warnings.some((w) => w.code === 'vwide'));
+});
+
+test('planJob: V-carve and cut out make two plans; each file passes the checker', () => {
+  const config = { ...DEFAULT_CLASS_CONFIG, vBit: '301' };
+  const mat = { ...DEFAULT_CLASS_CONFIG.materials[1], w: 200, h: 150 }; // MDF 6 mm
+  const shapes = [
+    { points: sq(60, 60, 5, 25), closed: true, job: 'vcarve', group: 'sign' },
+    { points: sq(40, 40, 80, 60), closed: true, job: 'cutout', group: 'board' },
+  ];
+  const b = { w: 200, h: 150, t: mat.t };
+  const plan = planJob({ shapes, board: b, bit, cut: { ...cut, depthPerPass: mat.depthPerPass }, vrules: vRules(config, mat) });
+  assert.ok(plan.vplan.moves.length > 0 && plan.moves.length > 0);
+  assert.deepEqual(plan.warnings.map((w) => w.code), []);
+  const vg = writeGcode({ moves: plan.vplan.moves, feeds: { feed: config.vFeed, plunge: config.vPlunge, rpm: 17000 }, safeZ: 5 });
+  assert.deepEqual(checkGcode(vg, { ...limitsFor(config, mat, true), board: b }).errors, []);
+  // Only V-carving: no "nothing to cut" warning from the empty flat plan.
+  const onlyV = planJob({ shapes: [shapes[0]], board: b, bit, cut, vrules: vRules(config, mat) });
+  assert.deepEqual(onlyV.warnings.map((w) => w.code), []);
+  // No V-bit in the class: V-carve shapes are simply not planned.
+  assert.equal(planJob({ shapes, board: b, bit, cut, vrules: null }).vplan, null);
+  assert.equal(vRules(DEFAULT_CLASS_CONFIG, mat), null);
+});
+
+test('class setup: V-carve cannot go within 1 mm of the thinnest board', () => {
+  const c = structuredClone(DEFAULT_CLASS_CONFIG);
+  c.vBit = '302';
+  c.vMaxDepth = 5.5; // MDF and plywood are 6 mm
+  assert.equal(validateClassConfig(c, { vCarve: true }).ok, false);
+  c.vMaxDepth = 4;
+  assert.equal(validateClassConfig(c, { vCarve: true }).ok, true);
+  const old = structuredClone(DEFAULT_CLASS_CONFIG);
+  delete old.vBit;
+  assert.equal(validateClassConfig(old, { vCarve: true }).config.vBit, 'none');
+});
+
+test('V-carving stays switched off: a saved V-bit is ignored until V_CARVE_ENABLED', () => {
+  assert.equal(V_CARVE_ENABLED, false);
+  const c = structuredClone(DEFAULT_CLASS_CONFIG);
+  c.vBit = '301';
+  c.vMaxDepth = 4;
+  const v = validateClassConfig(c);
+  assert.equal(v.ok, true);
+  assert.equal(v.config.vBit, 'none');
 });

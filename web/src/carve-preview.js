@@ -12,23 +12,27 @@ function hex(c) {
  * @param {Array} moves from planCut
  * @param {{w: number, h: number, t: number}} board
  * @param {number} r bit radius mm
+ * @param {object} [opts] dark theme; vmoves + vangle: V-bit moves, stamped as a cone
  * @returns {HTMLCanvasElement}
  */
-export function carveImage(moves, board, r, { dark = false } = {}) {
+export function carveImage(moves, board, r, { dark = false, vmoves = null, vangle = 90 } = {}) {
   const cell = Math.max(0.15, Math.max(board.w, board.h) / MAX_CELLS, r / 6);
   const W = Math.ceil(board.w / cell);
   const H = Math.ceil(board.h / cell);
   const height = new Float32Array(W * H);
 
-  const stamp = (ax, ay, bx, by, z) => {
-    const minX = Math.max(0, Math.floor((Math.min(ax, bx) - r) / cell));
-    const maxX = Math.min(W - 1, Math.ceil((Math.max(ax, bx) + r) / cell));
-    const minY = Math.max(0, Math.floor((Math.min(ay, by) - r) / cell));
-    const maxY = Math.min(H - 1, Math.ceil((Math.max(ay, by) + r) / cell));
+  // A flat bit cuts a flat-bottomed circle of radius r; a V-bit (cone, k = tan(angle / 2)) cuts
+  // |z| x k wide at the top, deepest at its centre.
+  const stamp = (ax, ay, bx, by, z, k = 0) => {
+    const reach = k ? -z * k : r;
+    const minX = Math.max(0, Math.floor((Math.min(ax, bx) - reach) / cell));
+    const maxX = Math.min(W - 1, Math.ceil((Math.max(ax, bx) + reach) / cell));
+    const minY = Math.max(0, Math.floor((Math.min(ay, by) - reach) / cell));
+    const maxY = Math.min(H - 1, Math.ceil((Math.max(ay, by) + reach) / cell));
     const dx = bx - ax;
     const dy = by - ay;
     const len2 = dx * dx + dy * dy;
-    const r2 = r * r;
+    const r2 = reach * reach;
     for (let j = minY; j <= maxY; j++) {
       const py = (j + 0.5) * cell;
       for (let i = minX; i <= maxX; i++) {
@@ -37,30 +41,36 @@ export function carveImage(moves, board, r, { dark = false } = {}) {
         t = t < 0 ? 0 : t > 1 ? 1 : t;
         const ex = px - ax - t * dx;
         const ey = py - ay - t * dy;
-        if (ex * ex + ey * ey <= r2) {
-          const k = j * W + i;
-          if (z < height[k]) height[k] = z;
+        const d2 = ex * ex + ey * ey;
+        if (d2 <= r2) {
+          const at = j * W + i;
+          const zz = k ? z + Math.sqrt(d2) / k : z;
+          if (zz < height[at]) height[at] = zz;
         }
       }
     }
   };
 
-  let prev = null;
-  for (const m of moves) {
-    if (prev && prev.x !== null && m.k !== 'rapid' && Math.min(prev.z, m.z) < 0) {
-      const same = prev.x === m.x && prev.y === m.y;
-      const z = same ? Math.min(prev.z, m.z) : Math.max(prev.z, m.z);
-      // Long lines in short pieces, so each stamp's box stays small.
-      const len = Math.hypot(m.x - prev.x, m.y - prev.y);
-      const n = Math.max(1, Math.ceil(len / 8));
-      for (let s = 0; s < n; s++) {
-        const a = s / n;
-        const b = (s + 1) / n;
-        stamp(prev.x + (m.x - prev.x) * a, prev.y + (m.y - prev.y) * a, prev.x + (m.x - prev.x) * b, prev.y + (m.y - prev.y) * b, z);
+  const run = (list, k) => {
+    let prev = null;
+    for (const m of list) {
+      if (prev && prev.x !== null && m.k !== 'rapid' && Math.min(prev.z, m.z) < 0) {
+        const same = prev.x === m.x && prev.y === m.y;
+        const z = same ? Math.min(prev.z, m.z) : Math.max(prev.z, m.z);
+        // Long lines in short pieces, so each stamp's box stays small.
+        const len = Math.hypot(m.x - prev.x, m.y - prev.y);
+        const n = Math.max(1, Math.ceil(len / 8));
+        for (let s = 0; s < n; s++) {
+          const a = s / n;
+          const b = (s + 1) / n;
+          stamp(prev.x + (m.x - prev.x) * a, prev.y + (m.y - prev.y) * a, prev.x + (m.x - prev.x) * b, prev.y + (m.y - prev.y) * b, z, k);
+        }
       }
+      prev = m;
     }
-    prev = m;
-  }
+  };
+  if (vmoves?.length) run(vmoves, Math.tan(((vangle / 2) * Math.PI) / 180));
+  run(moves, 0);
 
   const canvas = document.createElement('canvas');
   canvas.width = W;

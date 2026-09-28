@@ -6,7 +6,7 @@ import './teacher.css';
 import { initThemeButton } from './theme.js';
 import { $, esc } from './dom.js';
 import {
-  BITS, CLAMP_LAYOUTS, DEFAULT_CLASS_CONFIG, JOB_KEYS, MACHINES, MATERIAL_KINDS, ROUTERS, STARTING_FEEDS, LIMITS,
+  BITS, CLAMP_LAYOUTS, DEFAULT_CLASS_CONFIG, JOB_KEYS, MACHINES, MATERIAL_KINDS, ROUTERS, STARTING_FEEDS, LIMITS, V_BITS, V_CARVE_ENABLED,
 } from '../../shared/settings.js';
 import { JOB_LABELS } from '../../shared/cam.js';
 
@@ -20,7 +20,10 @@ const options = (obj, label = (v) => v.label ?? v) => Object.entries(obj).map(([
 $('#machine').innerHTML = options(MACHINES);
 $('#router').innerHTML = options(ROUTERS);
 $('#bit').innerHTML = options(BITS);
-$('#jobs').innerHTML = JOB_KEYS.map((j) => `<label class="check"><input type="checkbox" data-job="${j}"> ${esc(JOB_LABELS[j])}</label>`).join('');
+$('#vBit').innerHTML = '<option value="none">None: no V-carving</option>' + options(V_BITS);
+// V-carving is switched off for now (shared/settings.js V_CARVE_ENABLED): no V-bit card, no V-carve job box.
+$('#vCarveCard').hidden = !V_CARVE_ENABLED;
+$('#jobs').innerHTML = JOB_KEYS.filter((j) => V_CARVE_ENABLED || j !== 'vcarve').map((j) => `<label class="check"><input type="checkbox" data-job="${j}"> ${esc(JOB_LABELS[j])}</label>`).join('');
 
 async function api(method, body) {
   const r = await fetch('/api/teacher/class', {
@@ -61,7 +64,8 @@ function fill(c) {
   for (const cb of document.querySelectorAll('[data-job]')) cb.checked = c.jobs[cb.dataset.job] !== false;
   $('#tabW').value = c.tabs.width;
   $('#tabH').value = c.tabs.height;
-  for (const f of ['engraveDepth', 'pocketMaxDepth', 'safeZ', 'throughMm', 'marginMm', 'stepover']) $(`#${f}`).value = c[f];
+  for (const f of ['engraveDepth', 'pocketMaxDepth', 'safeZ', 'throughMm', 'marginMm', 'stepover', 'vFeed', 'vPlunge', 'vDepthPerPass', 'vMaxDepth']) $(`#${f}`).value = c[f];
+  $('#vBit').value = c.vBit ?? 'none';
   $('#climb').checked = c.climb;
   $('#note').value = c.note;
 }
@@ -91,6 +95,11 @@ function read() {
     marginMm: n('marginMm'),
     stepover: n('stepover'),
     climb: $('#climb').checked,
+    vBit: $('#vBit').value,
+    vFeed: n('vFeed'),
+    vPlunge: n('vPlunge'),
+    vDepthPerPass: n('vDepthPerPass'),
+    vMaxDepth: n('vMaxDepth'),
     note: $('#note').value,
   };
 }

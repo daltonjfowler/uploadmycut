@@ -18,8 +18,7 @@ export const MACHINES = {
   shapeoko4xxl: { label: 'Shapeoko 4 XXL', x: 838, y: 838, z: 95 },
 };
 
-// Flat end mills only for now (cut out, hole, pocket and engrave all work with them). V-bits come
-// with V-carving.
+// The class bit: flat end mills (cut out, hole, pocket and engrave all work with them).
 export const BITS = {
   102: { label: '#102 · 1/8 in flat end mill', short: '1/8 in flat bit', diameter: 3.175 },
   201: { label: '#201 · 1/4 in flat end mill', short: '1/4 in flat bit', diameter: 6.35 },
@@ -64,7 +63,19 @@ export const STARTING_FEEDS = {
   },
 };
 
-export const JOB_KEYS = ['cutout', 'hole', 'engrave', 'pocket'];
+// V-bits for V-carving, a second bit the teacher can turn on. Sizes are Carbide 3D's catalogue
+// values; check the bit in the drawer (docs/HARDWARE.md). `diameter` is the widest cut at the top.
+export const V_BITS = {
+  301: { label: '#301 · 90° V-bit', short: '90° V-bit', angle: 90, diameter: 12.7 },
+  302: { label: '#302 · 60° V-bit', short: '60° V-bit', angle: 60, diameter: 12.7 },
+};
+
+/** How deep a V-bit can cut before its full width is in the wood (90° #301: 6.35 mm). */
+export function vBitMaxDepth(bit) {
+  return bit.diameter / 2 / Math.tan((bit.angle * Math.PI) / 360);
+}
+
+export const JOB_KEYS = ['cutout', 'hole', 'engrave', 'pocket', 'vcarve'];
 
 // Where the clamps sit on a board of this material (the planner keeps every cut clear of them).
 export const CLAMP_LAYOUTS = {
@@ -102,6 +113,7 @@ export const LIMITS = {
   engraveDepth: [0.2, 3],
   pocketMaxDepth: [0.5, 20],
   marginMm: [2, 30],
+  vMaxDepth: [0.5, 10],
   stepover: [0.2, 0.6],
   thickness: [2, 40],
   clampSize: [10, 80],
@@ -130,6 +142,12 @@ export const DEFAULT_CLASS_CONFIG = {
   marginMm: 6,
   stepover: 0.4,
   climb: false,
+  // V-carving: off until the teacher picks a V-bit ('none').
+  vBit: 'none',
+  vFeed: 1000,
+  vPlunge: 300,
+  vDepthPerPass: 1.5,
+  vMaxDepth: 4,
   note: '',
 };
 
@@ -151,13 +169,30 @@ function label(errors, name, v, max) {
 }
 
 /** Check a class setup from the teacher page (or KV). Returns a clean copy. */
-export function validateClassConfig(input) {
+// V-carving is built but switched OFF until it is tested on the school machine (Dalton,
+// 2026-09-28: "leave V-carve deactivated"). While false, every class setup gets vBit 'none', so
+// no student sees the V-carve job, and the teacher page hides the V-bit card. Tests pass
+// { vCarve: true } to check the code that is waiting.
+export const V_CARVE_ENABLED = false;
+
+export function validateClassConfig(input, { vCarve = V_CARVE_ENABLED } = {}) {
   const errors = [];
   const c = input && typeof input === 'object' ? input : {};
   const out = {};
   out.machine = Object.hasOwn(MACHINES, c.machine) ? c.machine : (errors.push('Unknown machine.'), DEFAULT_CLASS_CONFIG.machine);
   out.router = Object.hasOwn(ROUTERS, c.router) ? c.router : (errors.push('Unknown router.'), DEFAULT_CLASS_CONFIG.router);
   out.bit = Object.hasOwn(BITS, String(c.bit)) ? String(c.bit) : (errors.push('Unknown bit.'), DEFAULT_CLASS_CONFIG.bit);
+  // Older saved setups have no V-bit fields: they mean no V-carving.
+  const vb = c.vBit === undefined ? 'none' : String(c.vBit);
+  out.vBit = vb === 'none' || Object.hasOwn(V_BITS, vb) ? vb : (errors.push('Unknown V-bit.'), 'none');
+  if (!vCarve) out.vBit = 'none';
+  out.vFeed = c.vFeed === undefined ? DEFAULT_CLASS_CONFIG.vFeed : inRange(errors, 'V-carve feed', c.vFeed, [50, LIMITS.maxFeed]);
+  out.vPlunge = c.vPlunge === undefined ? DEFAULT_CLASS_CONFIG.vPlunge : inRange(errors, 'V-carve plunge', c.vPlunge, [20, LIMITS.maxPlunge]);
+  out.vDepthPerPass = c.vDepthPerPass === undefined ? DEFAULT_CLASS_CONFIG.vDepthPerPass : inRange(errors, 'V-carve depth per pass', c.vDepthPerPass, LIMITS.depthPerPass);
+  out.vMaxDepth = c.vMaxDepth === undefined ? DEFAULT_CLASS_CONFIG.vMaxDepth : inRange(errors, 'Deepest V-carve', c.vMaxDepth, LIMITS.vMaxDepth);
+  if (out.vBit !== 'none' && out.vMaxDepth > vBitMaxDepth(V_BITS[out.vBit])) {
+    errors.push(`The deepest V-carve with the ${V_BITS[out.vBit].short} is ${Math.floor(vBitMaxDepth(V_BITS[out.vBit]) * 100) / 100} mm (deeper, the bit is wider than its cutting edge).`);
+  }
   const machine = MACHINES[out.machine];
   const mats = Array.isArray(c.materials) ? c.materials : [];
   if (mats.length < 1 || mats.length > LIMITS.materials) errors.push(`Set up 1 to ${LIMITS.materials} materials.`);
@@ -188,7 +223,7 @@ export function validateClassConfig(input) {
   });
   out.jobs = {};
   for (const k of JOB_KEYS) out.jobs[k] = c.jobs?.[k] !== false;
-  if (!JOB_KEYS.some((k) => out.jobs[k])) errors.push('Allow at least one job.');
+  if (!JOB_KEYS.some((k) => out.jobs[k] && (k !== 'vcarve' || out.vBit !== 'none'))) errors.push('Allow at least one job.');
   out.tabs = { width: inRange(errors, 'Tab width', c.tabs?.width, LIMITS.tabWidth), height: inRange(errors, 'Tab height', c.tabs?.height, LIMITS.tabHeight) };
   out.engraveDepth = inRange(errors, 'Engrave depth', c.engraveDepth, LIMITS.engraveDepth);
   out.pocketMaxDepth = inRange(errors, 'Deepest pocket', c.pocketMaxDepth, LIMITS.pocketMaxDepth);
@@ -203,6 +238,7 @@ export function validateClassConfig(input) {
   if (Number.isFinite(thinnest)) {
     if (out.tabs.height > thinnest - 0.5) errors.push(`Tabs must be at least 0.5 mm thinner than the thinnest material (${thinnest} mm).`);
     if (out.engraveDepth > thinnest - 0.5) errors.push(`Engrave depth must be at least 0.5 mm less than the thinnest material (${thinnest} mm).`);
+    if (out.vBit !== 'none' && out.vMaxDepth > thinnest - 1) errors.push(`The deepest V-carve must be at least 1 mm less than the thinnest material (${thinnest} mm).`);
   }
   for (const m of out.materials) {
     if (m.depthPerPass > m.t) errors.push(`${m.label}: depth per pass is more than the whole thickness.`);
@@ -228,8 +264,35 @@ export function cutRules(config, material) {
   };
 }
 
-/** What the checker holds a file to. */
-export function checkLimits(config, material) {
+/** V-carve rules for planVCarve, or null when the class has no V-bit. */
+export function vRules(config, material) {
+  if (!config.vBit || config.vBit === 'none') return null;
+  return {
+    bit: V_BITS[config.vBit],
+    depthPerPass: config.vDepthPerPass,
+    maxDepth: Math.min(config.vMaxDepth, material.t - 1, vBitMaxDepth(V_BITS[config.vBit])),
+    safeZ: config.safeZ,
+    marginMm: config.marginMm,
+    clamps: clampRects(material),
+  };
+}
+
+/** What the checker holds a file to. `vcarve` = the V-bit file (its own speeds). */
+export function checkLimits(config, material, vcarve = false) {
+  if (vcarve) {
+    const vr = vRules(config, material);
+    return {
+      board: { w: material.w, h: material.h, t: material.t },
+      maxThroughMm: 0,
+      // No deeper than the planner's own V-carve limit (+ 3-decimal rounding); no V-bit, no depth.
+      maxDepthMm: vr ? vr.maxDepth + 0.001 : 0,
+      maxFeed: Math.max(config.vFeed, config.vPlunge),
+      maxRpm: 32000,
+      safeZ: config.safeZ,
+      clamps: clampRects(material),
+      maxLines: LIMITS.maxLines,
+    };
+  }
   return {
     board: { w: material.w, h: material.h, t: material.t },
     maxThroughMm: config.throughMm + 0.05,
