@@ -59,7 +59,7 @@ button.danger:hover:not(:disabled) { background: var(--bad-soft); border-color: 
   background: var(--top); border-bottom: 3px solid var(--wood); position: relative; z-index: 5;
 }
 .brand { font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; display: inline-flex; align-items: center; gap: 10px; }
-.brand img { border-radius: 16px; }
+.brand img { border-radius: 12px; }
 .stages { display: flex; gap: 2px; background: var(--card2); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
 .stage {
   border: 0; background: none; border-radius: 6px; padding: 5px 14px; font-weight: 650; font-size: .8rem;
@@ -169,7 +169,7 @@ button.danger:hover:not(:disabled) { background: var(--bad-soft); border-color: 
   background: color-mix(in srgb, var(--card) 90%, transparent); border: 2px dashed var(--wood);
   border-radius: 16px; backdrop-filter: blur(4px);
 }
-.empty-card img { border-radius: 16px; }
+.empty-card img { border-radius: 12px; }
 .empty-card h1 { margin: 10px 0 4px; font-size: 1.5rem; letter-spacing: -.01em; }
 .empty-card p { margin: 0 0 16px; color: var(--muted); }
 .empty-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
@@ -219,7 +219,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
 /* Narrow screens (phones): panel becomes a bottom sheet; an empty board shows only the start card */
 @media (max-width: 760px) {
   .titlebar { flex-wrap: wrap; gap: 8px; padding: 6px 10px; }
-  .brand img { width: 56px; height: 56px; border-radius: 12px; }
+  .brand img { width: 42px; height: 42px; border-radius: 9px; }
   .chip-text { display: none; }
   .panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 40%; }
   .action { left: 8px; right: 8px; bottom: calc(40% + 16px); min-height: 0; padding: 8px 10px; }
@@ -227,7 +227,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
   .action button.big { padding: 8px 12px; font-size: .95rem; }
   .empty { right: 0; top: 104px; }
   .empty-card { margin: 0 12px; padding: 18px 16px; }
-  .empty-card img { width: 52px; height: 52px; }
+  .empty-card img { width: 39px; height: 39px; }
   body.is-empty .panel, body.is-empty .action { display: none; }
   .open-group { left: 8px; top: 8px; right: 8px; }
   .open-btn { padding: 7px 10px; }
