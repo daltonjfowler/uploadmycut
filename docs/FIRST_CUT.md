@@ -1,6 +1,6 @@
 # First cut on the school Shapeoko (checklist for Dalton)
 
-Goal for Monday 2026-09-28: learn what the machine is, prove it runs a known-good file, then run
+Goal for the first school session (not done yet as of 2026-09-29): learn what the machine is, prove it runs a known-good file, then run
 one uploadmycut file. Tick each line. Anything surprising: stop and take a photo.
 
 ## 0. Before Monday
