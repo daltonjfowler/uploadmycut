@@ -78,6 +78,12 @@ const encoder = new TextEncoder();
 
 // Secret comparison that leaks nothing through timing: both sides hashed to 32 bytes, then
 // Cloudflare's timingSafeEqual (same as uploadmymodel).
+/** True when `given` equals any of `keys`. Every key is compared, so the time does not say which one. */
+async function anyKeyEquals(given, keys) {
+  const hits = await Promise.all(keys.map((k) => constantTimeEquals(given, k)));
+  return hits.some(Boolean);
+}
+
 async function constantTimeEquals(a, b) {
   const [left, right] = await Promise.all([
     crypto.subtle.digest('SHA-256', encoder.encode(a)),
@@ -105,10 +111,11 @@ export async function readClassConfig(env) {
 // all: never fall open. No lockout: a school shares one IP, and a lockout would let one student
 // lock out the teacher.
 async function teacherOk(request, env) {
-  const expected = env.TEACHER_KEY ?? '';
-  if (expected === '') {
+  // TEACHER_KEY_2: an optional second teacher (a student teacher); delete that secret to remove them.
+  const keys = [env.TEACHER_KEY, env.TEACHER_KEY_2].filter(Boolean);
+  if (!keys.length) {
     console.error(JSON.stringify({ message: 'TEACHER_KEY is not set; teacher endpoint refused' }));
-  } else if (await constantTimeEquals(request.headers.get('x-teacher-key') ?? '', expected)) {
+  } else if (await anyKeyEquals(request.headers.get('x-teacher-key') ?? '', keys)) {
     return true;
   }
   await new Promise((r) => setTimeout(r, TEACHER_REJECT_DELAY_MS));
