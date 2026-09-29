@@ -26,6 +26,10 @@ uploadmymodel). Everything here is what students cannot change.
   *Starting values* fills in speeds for the chosen bit and wood kind. **These are starting values,
   not tested on this machine.** Watch the first cuts. If the router sounds bogged down or the bit
   squeals or burns, lower the feed; if chips are fine dust, the feed may be too slow.
+- **Clamps** (per material). Pick *Tape, no clamps*, *4 corners*, *Left and right edges* or
+  *Front and back edges*, and the clamp size. Students see grey clamp areas on the board and cannot
+  preview a cut that comes within the bit plus 2 mm of one. The file check refuses any move below
+  the safe height over a clamp area. Put the real clamps inside those areas.
 - **What students may do.** Turn off pockets (or any job) for a first project.
 - **Cut rules.**
   - *Tab width / height*: the bridges that hold cut-out parts. Default 6 mm wide, 2.5 mm tall.
@@ -33,7 +37,9 @@ uploadmymodel). Everything here is what students cannot change.
   - *Deepest pocket*: the most students can pick.
   - *Safe height*: how high the bit travels between cuts. It must clear your clamps.
   - *Cut below the board*: how far a through-cut goes into the wasteboard. Default 0.3 mm.
-  - *Edge margin*: how close to the board edge students may cut.
+  - *Edge margin*: how close to the board edge students may cut. Default 6 mm.
+  - *Pocket stepover*: how far apart the pocket passes are, as a share of the bit's width. Default
+    0.4 (40%).
 - **Note to the class** shows on every student's panel.
 
 Students get a new setup when they reload the page.
@@ -61,9 +67,10 @@ site made, so check every file, every time. The file never leaves your computer.
 
 The student page runs the same check before every download, and `/check/` runs it again on the file
 you were actually handed: millimetres and absolute moves set first, every move on the board and no
-higher than the safe height, no deeper than the board plus the cut-below depth, the class speeds,
-and no machine settings, unlock, tool change or homing commands in it. That check reduces
-mistakes; it does not make a cut safe. You check the file and stay at the machine.
+higher than the safe height, no low moves over a clamp area, no deeper than the board plus the
+cut-below depth, the class speeds, and no machine settings, unlock, tool change or homing commands
+in it. That check reduces mistakes; it does not make a cut safe. You check the file and stay at the
+machine.
 
 ## The file check page (`/check/`)
 

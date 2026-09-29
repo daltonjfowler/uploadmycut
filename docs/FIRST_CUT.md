@@ -27,13 +27,15 @@ one uploadmycut file. Tick each line. Anything surprising: stop and take a photo
 - [ ] Connect, then *Initialize*: does it home to the back right? Any alarm?
 - [ ] MDI: type `$I`, photo the answer. Type `$$`, photo the list. **Only look. Do not change any
       setting.**
-- [ ] Or: close Carbide Motion and use `/usb-test/` (read only), then *Save report*. This needs
-      the site online (not yet), or this laptop running `npm run dev` in `Desktop\uploadmycut`.
+- [ ] Or: close Carbide Motion and use [`/usb-test/`](https://uploadmycut.com/usb-test/) (read
+      only), then *Save report*. Chrome on a computer with a USB port; it asks for any port.
 
 ## C. Air cut (no bit, router OFF)
 
-- [ ] Make a keychain tag in uploadmycut (online, or `npm run dev` on the laptop) and download it with the **MDF 6 mm** material picked (its deepest
-      cut is 6.3 mm). Not the pine setup: that one goes 19.3 mm deep.
+- [ ] Make a keychain tag on [uploadmycut.com](https://uploadmycut.com) and download it with the
+      **MDF 6 mm** material picked (its deepest cut is 6.3 mm). Not the pine setup: that one goes
+      19.3 mm deep.
+- [ ] Drop both files on [`/check/`](https://uploadmycut.com/check/): it must say **OK to run**.
 - [ ] Zero X/Y at the board's front-left corner, and Z **30 mm above** the board top, so even the
       deepest move stays over 20 mm in the air.
 - [ ] Run it. Watch that it moves inside the board outline and goes down and up where expected.

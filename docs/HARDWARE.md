@@ -117,8 +117,8 @@ the app must also tell the person to switch the router off.
 - Carbide Create output starts `G90`, `G21`, then `G53G0Z-5.000` (safe Z in machine coordinates),
   `M6T..`, `M03S10000`, and ends `M02`
   (example: https://github.com/BenjaminPoilve/minichord/blob/main/hardware/graphics/keycap_cut.nc).
-  Our checker refuses `G53` and `M6`, so Carbide Create files will not pass it as-is. Fine for
-  phase 1 (we only check our own files); phase 3 needs a decision.
+  Our checker refuses `G53` and `M6`, so Carbide Create files will not pass it as-is: the
+  teacher's `/check/` page says *Do not run* for them. The USB sender (phase 3) needs a decision.
 
 ## 6. Routers: dial → rpm (approximate)
 
