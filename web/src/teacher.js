@@ -110,6 +110,12 @@ function say(text, bad = false) {
   m.classList.toggle('bad-text', bad);
 }
 
+/** Once a key works, ask the browser's password manager to keep it (Chrome and Edge show "Save password?"). */
+function offerToSaveKey() {
+  if (!window.PasswordCredential || !navigator.credentials) return;
+  navigator.credentials.store(new window.PasswordCredential({ id: 'teacher', password: key, name: 'Teacher key' })).catch(() => {});
+}
+
 async function open() {
   const r = await api('GET');
   if (r.status === 401) {
@@ -127,6 +133,7 @@ async function open() {
   try {
     sessionStorage.setItem(KEY, key);
   } catch { /* blocked */ }
+  offerToSaveKey();
   $('#keyCard').hidden = true;
   $('#setup').hidden = false;
   fill(r.data);
