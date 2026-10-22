@@ -65,6 +65,15 @@ button.danger:hover:not(:disabled) { background: var(--bad-soft); border-color: 
 }
 .brand { font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; display: inline-flex; align-items: center; gap: 10px; }
 .brand img { border-radius: 12px; }
+/* Dalton 2026-10-21: the site is unfinished and must say so on every page. */
+.wip-badge {
+  font-size: .78rem; font-weight: 800; letter-spacing: .03em; color: #fff; background: #c62828;
+  border-radius: 7px; padding: 5px 9px; white-space: nowrap;
+}
+.wip-note {
+  margin: 0 0 14px !important; padding: 8px 10px; border-radius: 8px; font-size: .9rem;
+  color: var(--bad) !important; background: var(--bad-soft); border: 1px solid var(--bad);
+}
 .stages { display: flex; gap: 2px; background: var(--card2); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
 .stage {
   border: 0; background: none; border-radius: 6px; padding: 5px 14px; font-weight: 650; font-size: .8rem;

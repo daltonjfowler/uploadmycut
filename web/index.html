@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>uploadmycut</title>
-  <meta name="description" content="Put your drawing on the board, pick what gets cut, and make a cut file for the class Shapeoko.">
+  <title>uploadmycut (unfinished: will not work correctly)</title>
+  <meta name="description" content="UNFINISHED: this tool is still being built and will not work correctly. Put a drawing on the board and make a cut file for the class Shapeoko.">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -17,6 +17,7 @@
 <body>
   <header class="titlebar">
     <strong class="brand"><img src="/icon.svg" data-logo alt="" width="54" height="54">uploadmycut</strong>
+    <span class="wip-badge" title="uploadmycut is still being built. Its cut files are not checked on the real machine yet, so they will not work correctly.">⚠ UNFINISHED: WILL NOT WORK CORRECTLY</span>
     <nav class="stages" aria-label="Steps">
       <button class="stage on" type="button" data-stage="design" aria-current="step">Design</button>
       <button class="stage" type="button" data-stage="preview">Preview</button>
@@ -61,6 +62,7 @@
       <div class="empty-card">
         <img src="/icon.svg" alt="" width="54" height="54">
         <h1>Put a drawing on the board</h1>
+        <p class="wip-note"><strong>Unfinished.</strong> uploadmycut is still being built and WILL NOT WORK CORRECTLY. Do not run its files on the Shapeoko yet.</p>
         <p>An SVG from Inkscape, Canva, Google Drawings or Tinkercad, or start with a shape.</p>
         <div class="empty-actions">
           <button id="emptyOpen" class="primary big" type="button">📂 Open drawing</button>

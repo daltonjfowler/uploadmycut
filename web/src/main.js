@@ -673,6 +673,7 @@ function renderPreview() {
       ${failed.length === 0
         ? `<div class="msg ok"><b>✓</b><span>Passed the class limits check: on the board, not too deep, class speeds. That does not make a cut safe: your teacher checks it and stays at the machine.</span></div>`
         : `<div class="msg bad"><b>✕</b><span>The file did not pass the safety check. Tell your teacher:<br>${failed.flatMap((f) => f.check.errors.map((e) => esc(`${f.name} line ${e.line}: ${e.message}`))).join('<br>')}</span></div>`}
+      <div class="msg bad"><b>⚠</b><span><strong>Unfinished:</strong> uploadmycut is still being built and WILL NOT WORK CORRECTLY. Its files are not tested on the Shapeoko. Do not run them yet.</span></div>
       ${r.two ? '<p class="note">Two files: the V-bit carves first, then the flat bit cuts. Your teacher swaps the bit in between.</p>' : ''}
       <label class="name-field">File name
         <input id="fileName" type="text" maxlength="40" value="${esc(state.fileName)}" placeholder="my-cut" spellcheck="false"></label>

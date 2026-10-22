@@ -1,5 +1,8 @@
 # uploadmycut
 
+> **⚠ UNFINISHED: WILL NOT WORK CORRECTLY.** uploadmycut is still being built. Its cut files have not been
+> tested on the real Shapeoko. Do not run them on a machine.
+
 Classroom cut files for the Shapeoko CNC, with teacher-set limits, built for Chromebook classrooms. Students open
 a drawing (SVG), pick a shape or a starter project, or type text; place it on the board; give each
 line a job (cut out, cut hole, engrave, pocket); fix the red spots where the bit is too thick;
