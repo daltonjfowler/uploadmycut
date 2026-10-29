@@ -869,6 +869,7 @@ $('#clearBtn').addEventListener('click', () => {
 });
 $('#redoBtn').addEventListener('click', redo);
 $('#help').addEventListener('click', () => $('#helpDialog').showModal());
+$('#about').addEventListener('click', () => $('#aboutDialog').showModal()); // what the site is for (Dalton, 2026-10-28)
 for (const b of document.querySelectorAll('.stage')) b.addEventListener('click', () => setStage(b.dataset.stage));
 
 const shapesMenu = $('#shapesMenu');

@@ -134,6 +134,7 @@ button.danger:hover:not(:disabled) { background: var(--bad-soft); border-color: 
 .tool-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
 .tool-row button { padding: 6px 2px; font-size: .82rem; }
 .note { margin: 0; color: var(--muted); font-size: .84rem; }
+.dialog .note { margin-top: 12px; }
 .teacher-note { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); border: 1px solid var(--accent-line); white-space: pre-wrap; }
 
 /* Jobs */

@@ -29,8 +29,9 @@
     </label>
     <span class="grow"></span>
     <button id="help" class="toplink" type="button">ⓘ How to cut</button>
+    <button id="about" class="toplink" type="button">About</button>
     <a class="toplink" href="/teacher/" title="For teachers: bit, materials and speeds">Teacher</a>
-    <button id="theme" class="themebtn" type="button">🖥️ System</button>
+    <button id="theme" class="themebtn" type="button">🌙 Dark</button>
   </header>
 
   <main id="stage" class="stage-area">
@@ -113,6 +114,15 @@
         <tr><td>Undo / redo</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> · <kbd>Ctrl</kbd>+<kbd>Y</kbd></td></tr>
       </table>
       <p class="note">Your drawing never leaves this Chromebook. The cut file is made right here in the browser. This site limits what students can change to reduce mistakes; it is not a safety system. <a href="/legal" target="_blank" rel="noopener">Privacy &amp; legal</a></p>
+      <div class="dialog-actions"><button class="primary" value="close">Got it</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="aboutDialog" class="dialog">
+    <form method="dialog">
+      <h2>About uploadmycut</h2>
+      <p>uploadmycut makes cut files for the class Shapeoko CNC router: put a drawing or shape on the board, then save the cut file. It is still being built and will not work correctly yet.</p>
+      <p class="note">Made by <a href="https://daltonjfowler.com" target="_blank" rel="noopener">Dalton Fowler</a>. <a href="/legal" target="_blank" rel="noopener">Privacy &amp; legal</a></p>
       <div class="dialog-actions"><button class="primary" value="close">Got it</button></div>
     </form>
   </dialog>
