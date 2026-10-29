@@ -93,9 +93,8 @@ const frame = readFileSync(`${OUT}${dlf.suggestedFilename()}`, 'utf8');
 check('frame file: router off, stays up, passes the checker', !/\bM0?3\b/.test(frame) && !/Z-/.test(frame)
   && checkGcode(frame, { board: { w: 140, h: 200, t: 19 }, maxThroughMm: 0.35, maxFeed: 900, safeZ: 5 }).ok, frame.slice(0, 300));
 
-// Dark theme screenshot of the same preview.
-await page.click('#theme'); // system -> light
-await page.click('#theme'); // light -> dark
+// Dark theme screenshot of the same preview. Dark is the default with nothing saved (2026-10-28).
+check('starts dark', await page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'not dark');
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${OUT}preview-dark.png` });
 
