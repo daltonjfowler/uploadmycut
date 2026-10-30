@@ -729,7 +729,10 @@ function download(which = 0) {
 
 // ---- small UI helpers ----
 function toast(text, kind = '') {
-  const t = el('div', { class: `toast ${kind}`, role: kind === 'bad' ? 'alert' : 'status' }, text);
+  const t = el('div', { class: `toast ${kind}`, role: kind === 'bad' ? 'alert' : 'status' });
+  const x = el('button', { type: 'button', class: 'toast-x', 'aria-label': 'Close this message' }, '✕');
+  x.addEventListener('click', () => t.remove());
+  t.append(el('span', {}, text), x);
   $('#toasts').append(t);
   setTimeout(() => t.remove(), kind === 'bad' ? 9000 : 5000);
 }

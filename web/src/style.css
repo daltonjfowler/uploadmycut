@@ -191,7 +191,9 @@ button.danger:hover:not(:disabled) { background: var(--bad-soft); border-color: 
 
 /* Overlays */
 .toasts { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 9; display: grid; gap: 6px; pointer-events: none; }
-.toast { pointer-events: auto; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 8px 12px; box-shadow: var(--shadow); max-width: 480px; }
+.toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 8px; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 8px 6px 8px 12px; box-shadow: var(--shadow); max-width: 480px; }
+.toast-x { flex: none; min-width: 28px; min-height: 28px; margin: -4px 0; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: 1.05rem; line-height: 1; cursor: pointer; }
+.toast-x:hover, .toast-x:focus-visible { color: inherit; background: color-mix(in srgb, var(--muted) 18%, transparent); }
 .toast.bad { border-left-color: var(--bad); }
 .toast.warn { border-left-color: var(--warn); }
 .drop-overlay { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 18%, transparent); border: 3px dashed var(--accent); font-size: 1.3rem; font-weight: 700; }
