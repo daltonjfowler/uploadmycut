@@ -57,3 +57,11 @@ export function refuseUnlessLocal(base, what) {
   console.log(`FAIL refused: ${what} changes the class setup, so it runs only against a local dev server (not ${base})`);
   process.exit(1);
 }
+
+/** Sign in on the teacher page (web/src/teacher-account.ts) with the old shared key. */
+export async function signInShared(page, key) {
+  await page.waitForSelector('#taWho option[value="shared"]', { state: 'attached' });
+  await page.selectOption('#taWho', 'shared');
+  await page.fill('#taPassword', key);
+  await page.click('#account form button[type="submit"]');
+}

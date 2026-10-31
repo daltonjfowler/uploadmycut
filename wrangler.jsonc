@@ -13,9 +13,14 @@
   "kv_namespaces": [
     // This app's own namespace (title uploadmycut-CLASS_KV). Never reuse uploadmycode's
     // (CLASS_KV), uploadmylaser's or uploadmymodel's.
-    { "binding": "CLASS_KV", "id": "108310feb1eb4ec09b2652febffcb103" }
+    { "binding": "CLASS_KV", "id": "108310feb1eb4ec09b2652febffcb103" },
+    // Teacher accounts (src/teachers.ts): ONE namespace shared by all four uploadmy sites on purpose,
+    // so a password works everywhere. Holds names and salted password hashes, never passwords.
+    { "binding": "TEACHERS_KV", "id": "6c37dd40d71545e989448c728031746e" }
   ],
-  // TEACHER_KEY is a secret: npx wrangler secret put TEACHER_KEY (the shared family password).
+  // Secrets: TEACHER_SESSION_KEY signs teacher sessions; TEACHER_KEY (+ _2) is the old shared family
+  // key, still accepted until deleted. npx wrangler secret put <NAME>, value piped in, never typed on
+  // the command line.
   // public/ is built from web/ by `npm run build` (npm run deploy does it first).
   "assets": {
     "directory": "./public/",

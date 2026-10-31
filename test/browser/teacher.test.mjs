@@ -1,7 +1,8 @@
 // Teacher page: wrong key refused; right key loads, saves, and students get the new setup; reset.
-// Key: UMC_TEACHER_KEY, else TEACHER_KEY from .dev.vars (never on the command line: npm echoes it).
+// Signs in as the old shared key (teacher-account.ts). Key: UMC_TEACHER_KEY, else TEACHER_KEY from
+// .dev.vars (never on the command line: npm echoes it).
 import { readFileSync } from 'node:fs';
-import { BASE, OUT, check, failed, openPage, refuseUnlessLocal } from './lib.mjs';
+import { BASE, OUT, check, failed, openPage, refuseUnlessLocal, signInShared } from './lib.mjs';
 
 const base = process.argv[2] || BASE;
 refuseUnlessLocal(base, 'the teacher test');
@@ -10,13 +11,11 @@ const key = process.env.UMC_TEACHER_KEY
 const { browser, page, errors } = await openPage({ base });
 
 await page.goto(`${base}teacher/`);
-await page.fill('#key', 'wrong-key');
-await page.click('#keyForm button');
-await page.waitForFunction(() => /not right/.test(document.querySelector('#keyMsg').textContent));
+await signInShared(page, 'wrong-key');
+await page.waitForFunction(() => /not right/.test(document.querySelector('#account .ta-msg').textContent));
 check('wrong key refused', await page.isHidden('#setup'));
 
-await page.fill('#key', key);
-await page.click('#keyForm button');
+await signInShared(page, key);
 await page.waitForSelector('#setup:not([hidden])');
 check('right key opens the setup', true);
 await page.screenshot({ path: `${OUT}teacher.png`, fullPage: true });
@@ -31,6 +30,8 @@ await page.fill('#note', 'Safety glasses on!');
 await page.click('#setup button[type="submit"]');
 await page.waitForFunction(() => /Saved/.test(document.querySelector('#saveMsg').textContent));
 check('saved', true);
+await page.waitForFunction(() => /saved the class setup/.test(document.querySelector('.ta-changes').textContent));
+check('recent changes show the save', true);
 
 // Bad values are refused by the server, not just the page.
 const bad = await page.evaluate(async (k) => {

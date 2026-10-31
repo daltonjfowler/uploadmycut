@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { chromium } from 'playwright-core';
-import { BASE, CHROME } from './lib.mjs';
+import { BASE, CHROME, signInShared } from './lib.mjs';
 
 const axe = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
 const base = process.argv[2] || BASE;
@@ -34,8 +34,7 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForSelector('#download');
   await scan(page, `${scheme}: preview`);
   await page.goto(`${base}teacher/`);
-  await page.fill('#key', key);
-  await page.click('#keyForm button');
+  await signInShared(page, key);
   await page.waitForSelector('#setup:not([hidden])');
   await scan(page, `${scheme}: teacher page`);
   await page.goto(`${base}usb-test/`);

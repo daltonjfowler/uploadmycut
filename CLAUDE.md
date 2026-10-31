@@ -32,7 +32,13 @@ All cutting maths runs in the student's browser. There is no container, so no co
   uploaded). `?debug` puts `window.umc` on the page for browser tests (`umc.settled()` waits for
   planning).
 - `src/worker.js`: https / www redirects, security headers + CSP, `/api/health`, `/api/class`
-  (public), `/api/teacher/class` (GET/PUT/DELETE, `x-teacher-key`). KV key `class`.
+  (public), `/api/teachers` (public sign-in names), `/api/teacher/class` (GET/PUT/DELETE,
+  `x-teacher-key`). KV key `class`.
+- Teacher accounts (Dalton 2026-10-30): `src/teachers.ts` (server) and `web/src/teacher-account.ts` + `.css`
+  (teacher page) are the SAME files on all four uploadmy sites: change one, copy to all four. Each teacher picks
+  their own password (start code first); accounts live in the shared `TEACHERS_KV` namespace, sessions are signed
+  with this site's `TEACHER_SESSION_KEY` secret and sent as `x-teacher-key`. The old shared `TEACHER_KEY`(_2) still
+  works until those secrets are deleted. Teacher changes are logged with the name (`logChange`, "Recent changes").
 - `scripts/make-icons.mjs`: draws the icon (blue tile `#1E3A8A`, arrow `#60A5FA`). Edit there.
 
 ## Safety invariants (never break these)
@@ -79,8 +85,8 @@ Windows: after each `npm run build`, restart wrangler dev (it keeps the old asse
 background `wrangler dev` shell leaves its `workerd.exe` running and still listening on 8791, so
 tests can hit an OLD build: before restarting, stop every workerd whose command line mentions
 uploadmycut (and the wrangler node processes), and check only one listener is left on 8791. Local dev
-key lives in gitignored `.dev.vars`; the teacher test reads it from there (or `UMC_TEACHER_KEY`),
-never from the command line.
+key lives in gitignored `.dev.vars` (plus a throwaway `TEACHER_SESSION_KEY` for local sign-ins); the teacher
+test reads `TEACHER_KEY` from there (or `UMC_TEACHER_KEY`) and signs in as the shared key, never from the command line.
 
 ## Style
 Match the existing code. Short comments only where the why is not obvious. Student-facing text is

@@ -23,16 +23,11 @@
   </header>
 
   <main class="page-main">
-    <section class="card page-card" id="keyCard">
-      <h2>Teacher key</h2>
-      <form id="keyForm" class="row">
-        <!-- a fixed user name, so the browser's password manager can save and fill the key -->
-        <input type="text" name="username" autocomplete="username" value="teacher" hidden>
-        <label class="sr-only" for="key">Teacher key</label>
-        <input id="key" name="password" class="text" type="password" autocomplete="current-password" placeholder="Teacher key" required>
-        <button class="primary" type="submit">Open</button>
-      </form>
-      <p id="keyMsg" class="note">The same teacher password as uploadmycode, uploadmylaser and uploadmymodel.</p>
+    <section class="card page-card" id="accountCard">
+      <h2>Teacher sign-in</h2>
+      <!-- src/teacher-account.ts: sign in, choose a password, teacher accounts, recent changes -->
+      <div id="account"></div>
+      <p id="loadMsg" class="note bad-text" hidden></p>
     </section>
 
     <form id="setup" hidden>

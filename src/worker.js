@@ -6,10 +6,12 @@
 //
 // All cutting maths runs in the student's browser, so the server has little to do: it hands out
 // the teacher's class setup (bit, materials, speeds, which jobs are allowed). The setup lives in
-// this app's own KV namespace under "class". GET /api/class is public; /api/teacher/* needs the
-// TEACHER_KEY secret. No secret set = no teacher access.
+// this app's own KV namespace under "class". GET /api/class is public; /api/teacher/* needs a
+// teacher: a signed-in account (src/teachers.ts, shared by all four uploadmy sites) or the old shared
+// TEACHER_KEY. Nothing set up = no teacher access.
 
 import { DEFAULT_CLASS_CONFIG, validateClassConfig } from '../shared/settings.js';
+import { AccountError, accountRoute, checkCredential, logChange, readSignIn, setupAllows, signInOptions } from './teachers.ts';
 
 const KV_CLASS = 'class';
 const MAX_TEACHER_BYTES = 8 * 1024;
@@ -74,24 +76,6 @@ function json(status, body) {
   });
 }
 
-const encoder = new TextEncoder();
-
-// Secret comparison that leaks nothing through timing: both sides hashed to 32 bytes, then
-// Cloudflare's timingSafeEqual (same as uploadmymodel).
-/** True when `given` equals any of `keys`. Every key is compared, so the time does not say which one. */
-async function anyKeyEquals(given, keys) {
-  const hits = await Promise.all(keys.map((k) => constantTimeEquals(given, k)));
-  return hits.some(Boolean);
-}
-
-async function constantTimeEquals(a, b) {
-  const [left, right] = await Promise.all([
-    crypto.subtle.digest('SHA-256', encoder.encode(a)),
-    crypto.subtle.digest('SHA-256', encoder.encode(b)),
-  ]);
-  return crypto.subtle.timingSafeEqual(left, right);
-}
-
 // The saved class setup, or the defaults if none is saved (or it no longer passes the checks).
 export async function readClassConfig(env) {
   try {
@@ -107,27 +91,39 @@ export async function readClassConfig(env) {
   return DEFAULT_CLASS_CONFIG;
 }
 
-// A wrong key waits a moment (slows guessing). No secret uploaded means no teacher endpoint at
-// all: never fall open. No lockout: a school shares one IP, and a lockout would let one student
-// lock out the teacher.
-async function teacherOk(request, env) {
-  // TEACHER_KEY_2: an optional second teacher (a student teacher); delete that secret to remove them.
-  const keys = [env.TEACHER_KEY, env.TEACHER_KEY_2].filter(Boolean);
-  if (!keys.length) {
-    console.error(JSON.stringify({ message: 'TEACHER_KEY is not set; teacher endpoint refused' }));
-  } else if (await anyKeyEquals(request.headers.get('x-teacher-key') ?? '', keys)) {
-    return true;
+// Who this is (src/teachers.ts), or null. A wrong key, password, start code or session waits a
+// moment (slows guessing). Nothing set up (no TEACHER_KEY / TEACHER_KEY_2, no accounts) means no
+// teacher endpoint at all: never fall open. No lockout: a school shares one IP, and a lockout would
+// let one student lock out the teacher.
+async function teacherWho(env, cred) {
+  // TEACHER_KEY_2: an optional second shared key (a student teacher); delete that secret to remove it.
+  if (!env.TEACHER_KEY && !env.TEACHER_KEY_2 && !(env.TEACHERS_KV && env.TEACHER_SESSION_KEY)) {
+    console.error(JSON.stringify({ message: 'no teacher key or accounts set up; teacher endpoint refused' }));
+  } else {
+    const who = await checkCredential(env, cred, Date.now());
+    if (who) return who;
   }
   await new Promise((r) => setTimeout(r, TEACHER_REJECT_DELAY_MS));
-  return false;
+  return null;
 }
 
 async function handleTeacher(request, env, url) {
-  if (!(await teacherOk(request, env))) return json(401, { error: 'key', message: 'Wrong teacher key.' });
-  if (url.pathname !== '/api/teacher/class') return json(404, { error: 'not_found', message: 'No such API.' });
+  const path = url.pathname;
+  // Signing in sends the name and password in the body; every other call sends the session (or the
+  // old shared key) in x-teacher-key.
+  const cred = path === '/api/teacher/signin' && request.method === 'POST'
+    ? await readSignIn(request)
+    : request.headers.get('x-teacher-key') ?? '';
+  const who = await teacherWho(env, cred);
+  if (!who) return json(401, { error: 'key', message: 'Wrong teacher key.' });
+  if (who.setup && !setupAllows(path)) return json(403, { error: 'setup', message: 'Choose your own password first.' });
+  const account = await accountRoute(request, path, env, env.CLASS_KV, who, cred, Date.now());
+  if (account) return account;
+  if (path !== '/api/teacher/class') return json(404, { error: 'not_found', message: 'No such API.' });
   if (request.method === 'GET') return json(200, await readClassConfig(env));
   if (request.method === 'DELETE') {
     await env.CLASS_KV?.delete(KV_CLASS);
+    await logChange(env.CLASS_KV, who, 'Reset the class setup to the defaults', Date.now());
     return json(200, DEFAULT_CLASS_CONFIG);
   }
   if (request.method !== 'PUT') return json(405, { error: 'method', message: 'Use GET, PUT or DELETE.' });
@@ -143,6 +139,7 @@ async function handleTeacher(request, env, url) {
   if (!v.ok) return json(400, { error: 'invalid', message: 'Some of those values are not allowed.', details: v.errors });
   if (!env.CLASS_KV) return json(503, { error: 'storage', message: 'Storage is not set up on this server.' });
   await env.CLASS_KV.put(KV_CLASS, JSON.stringify(v.config));
+  await logChange(env.CLASS_KV, who, 'Saved the class setup', Date.now());
   return json(200, v.config);
 }
 
@@ -152,7 +149,12 @@ async function handleApi(request, env, url) {
     if (request.method !== 'GET') return json(405, { error: 'method', message: 'Use GET.' });
     return json(200, await readClassConfig(env));
   }
-  // Everything under /api/teacher/ needs the key, even paths that do not exist.
+  // The teacher sign-in list: names only.
+  if (url.pathname === '/api/teachers') {
+    if (request.method !== 'GET') return json(405, { error: 'method', message: 'Use GET.' });
+    return json(200, await signInOptions(env));
+  }
+  // Everything under /api/teacher/ needs a teacher, even paths that do not exist.
   if (url.pathname.startsWith('/api/teacher/')) return handleTeacher(request, env, url);
   return json(404, { error: 'not_found', message: 'No such API.' });
 }
@@ -164,7 +166,16 @@ export default {
       return withSecurityHeaders(new Response(null, { status: 301, headers: { location: target } }));
     }
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/api/')) return withSecurityHeaders(await handleApi(request, env, url));
+    if (url.pathname.startsWith('/api/')) {
+      try {
+        return withSecurityHeaders(await handleApi(request, env, url));
+      } catch (e) {
+        // A sign-in body too large or not JSON (src/teachers.ts readSignIn); `error` is the sentence
+        // the shared sign-in box shows.
+        if (e instanceof AccountError) return withSecurityHeaders(json(e.status, { error: e.message }));
+        throw e;
+      }
+    }
     return withSecurityHeaders(await env.ASSETS.fetch(request));
   },
 };

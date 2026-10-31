@@ -8,7 +8,8 @@ body.page { display: block; overflow: auto; height: auto; min-height: 100dvh; }
 .text { border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; background: var(--card2); color: var(--ink); min-width: 0; width: 100%; }
 textarea.text { font: inherit; resize: vertical; }
 select { border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; background: var(--card2); }
-#keyForm .text { max-width: 320px; }
+/* The sign-in box (teacher-account.ts) uses this page's input look. */
+#account input:not([type="checkbox"]) { border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; background: var(--card2); color: var(--ink); }
 .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
 .lab { display: grid; gap: 4px; font-size: .86rem; color: var(--muted); }
 .lab select, .lab input { color: var(--ink); }

@@ -1,5 +1,5 @@
-// The teacher page: load the class setup with the teacher key, edit it, save it. The Worker checks
-// everything again (shared/settings.js validateClassConfig).
+// The teacher page: sign in (teacher-account.ts), load the class setup, edit it, save it. The Worker
+// checks everything again (shared/settings.js validateClassConfig).
 
 import './style.css';
 import './teacher.css';
@@ -9,9 +9,9 @@ import {
   BITS, CLAMP_LAYOUTS, DEFAULT_CLASS_CONFIG, JOB_KEYS, MACHINES, MATERIAL_KINDS, ROUTERS, STARTING_FEEDS, LIMITS, V_BITS, V_CARVE_ENABLED,
 } from '../../shared/settings.js';
 import { JOB_LABELS } from '../../shared/cam.js';
+import { mountAccount } from './teacher-account.ts';
 
-const KEY = 'umc.teacherKey';
-let key = '';
+const KEY = 'umc.teacherKey'; // the sign-in, kept by teacher-account.ts
 let config = null;
 
 initThemeButton($('#theme'));
@@ -28,10 +28,12 @@ $('#jobs').innerHTML = JOB_KEYS.filter((j) => V_CARVE_ENABLED || j !== 'vcarve')
 async function api(method, body) {
   const r = await fetch('/api/teacher/class', {
     method,
-    headers: { 'x-teacher-key': key, ...(body ? { 'content-type': 'application/json' } : {}) },
+    headers: { 'x-teacher-key': account.credential(), ...(body ? { 'content-type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await r.json().catch(() => ({}));
+  if (r.status === 401) account.refused(); // back to the sign-in box, which says why
+  else if (r.ok && method !== 'GET') account.refreshChanges();
   return { ok: r.ok, status: r.status, data };
 }
 
@@ -110,39 +112,28 @@ function say(text, bad = false) {
   m.classList.toggle('bad-text', bad);
 }
 
-/** Once a key works, ask the browser's password manager to keep it (Chrome and Edge show "Save password?"). */
-function offerToSaveKey() {
-  if (!window.PasswordCredential || !navigator.credentials) return;
-  navigator.credentials.store(new window.PasswordCredential({ id: 'teacher', password: key, name: 'Teacher key' })).catch(() => {});
-}
-
 async function open() {
   const r = await api('GET');
-  if (r.status === 401) {
-    $('#keyMsg').textContent = 'That key is not right.';
-    $('#keyMsg').classList.add('bad-text');
-    try {
-      sessionStorage.removeItem(KEY);
-    } catch { /* blocked */ }
-    return;
-  }
+  if (r.status === 401) return; // api() already put the sign-in box back
+  $('#loadMsg').hidden = r.ok;
   if (!r.ok) {
-    $('#keyMsg').textContent = r.data.message ?? 'The server did not answer. Try again.';
+    $('#loadMsg').textContent = r.data.message ?? 'The server did not answer. Reload the page to try again.';
     return;
   }
-  try {
-    sessionStorage.setItem(KEY, key);
-  } catch { /* blocked */ }
-  offerToSaveKey();
-  $('#keyCard').hidden = true;
   $('#setup').hidden = false;
   fill(r.data);
 }
 
-$('#keyForm').addEventListener('submit', (e) => {
-  e.preventDefault();
-  key = $('#key').value.trim();
-  open();
+// Signed in (with a password chosen): load the class setup. A saved sign-in does this without a click.
+const account = mountAccount({
+  root: $('#account'),
+  storageKey: KEY,
+  onSignedIn: () => void open(),
+  onSignedOut: () => {
+    $('#setup').hidden = true;
+    $('#loadMsg').hidden = true;
+    say('');
+  },
 });
 
 $('#matRows').addEventListener('click', (e) => {
@@ -192,8 +183,3 @@ $('#reset').addEventListener('click', async () => {
     say(r.data.message ?? 'Could not reset.', true);
   }
 });
-
-try {
-  key = sessionStorage.getItem(KEY) ?? '';
-} catch { /* blocked */ }
-if (key) open();
